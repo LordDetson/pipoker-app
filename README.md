@@ -7,6 +7,7 @@ Planning Poker is a consensus-based technique used by development teams to estim
 ## Features
 **Flexible Customization:** Customize the estimation cards according to your team's preferences.
 **Real-Time Updates:** With PiPoker's real-time updates, all team members can instantly see the estimated values provided by others. This ensures transparency and enables effective decision-making during the planning process.
+**Private Rooms:** PiPoker introduces a feature that allows users to create private rooms for their teams. These private rooms provide a dedicated space where team members can collaborate and engage in the estimation process with ease and confidentiality.
 
 ## Technology Stack
 PiPoker API is built using the following technologies:
