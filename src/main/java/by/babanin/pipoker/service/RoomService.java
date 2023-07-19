@@ -1,6 +1,7 @@
 package by.babanin.pipoker.service;
 
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,5 +41,59 @@ public class RoomService {
 
     public Optional<Room> find(String id) {
         return Optional.ofNullable(rooms.get(id));
+    }
+
+    public Room remove(String id) {
+        return rooms.remove(id);
+    }
+
+    public Participant addParticipant(String roomId, Participant participant) {
+        return addParticipant(get(roomId), participant);
+    }
+
+    public Participant addParticipant(Room room, Participant participant) {
+        if(!room.getParticipants().add(participant)) {
+            throw new RoomException(participant.getNickname() + " participant is already exist");
+        }
+        return participant;
+    }
+
+    public Participant getParticipant(Room room, String nickname) {
+        return findParticipant(room, nickname)
+                .orElseThrow(() -> new RoomException(nickname + " participant is not found"));
+    }
+
+    public boolean containsParticipant(String roomId, String nickname) {
+        return containsParticipant(get(roomId), nickname);
+    }
+
+    public boolean containsParticipant(Room room, String nickname) {
+        return findParticipant(room, nickname).isPresent();
+    }
+
+    public Optional<Participant> findParticipant(Room room, String nickname) {
+        return room.getParticipants().stream()
+                .filter(participant -> participant.getNickname().equalsIgnoreCase(nickname))
+                .findFirst();
+    }
+
+    public Participant removeParticipant(String roomId, String nickname) {
+        Room room = get(roomId);
+        return removeParticipant(room, getParticipant(room, nickname));
+    }
+
+    public Participant removeParticipant(String roomId, Participant participant) {
+        return removeParticipant(get(roomId), participant);
+    }
+
+    public Participant removeParticipant(Room room, Participant participant) {
+        LinkedHashSet<Participant> participants = room.getParticipants();
+        if(!participants.remove(participant)) {
+            throw new RoomException(participant.getNickname() + " participant is not found");
+        }
+        if(participants.isEmpty()) {
+            remove(room.getId());
+        }
+        return participant;
     }
 }

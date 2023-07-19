@@ -1,6 +1,7 @@
 package by.babanin.pipoker.controller;
 
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,17 +45,22 @@ public class RoomController {
             @PathVariable("id") @NotBlank String id,
             @RequestParam("nickname") @NotBlank String nickname
     ) {
-        return roomService.get(id).getParticipants().stream()
-                .anyMatch(participant -> participant.getNickname().equalsIgnoreCase(nickname));
+        return roomService.containsParticipant(id, nickname);
     }
 
-    @PutMapping("{id}")
-    Room addParticipant(
+    @PutMapping("{id}/add-participant")
+    Participant addParticipant(
             @PathVariable("id") @NotBlank String id,
             @RequestBody @Valid Participant participant
     ) {
-        Room room = roomService.get(id);
-        room.getParticipants().add(participant);
-        return room;
+        return roomService.addParticipant(id, participant);
+    }
+
+    @DeleteMapping("{id}/remove-participant")
+    Participant removeParticipant(
+            @PathVariable("id") @NotBlank String id,
+            @RequestParam("nickname") @NotBlank String nickname
+    ) {
+        return roomService.removeParticipant(id, nickname);
     }
 }
