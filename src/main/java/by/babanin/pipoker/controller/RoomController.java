@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import by.babanin.pipoker.dto.CreateRoom;
 import by.babanin.pipoker.dto.Participant;
 import by.babanin.pipoker.dto.Room;
+import by.babanin.pipoker.dto.Vote;
 import by.babanin.pipoker.service.RoomService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -62,5 +63,19 @@ public class RoomController {
             @RequestParam("nickname") @NotBlank String nickname
     ) {
         return roomService.removeParticipant(id, nickname);
+    }
+
+    @PostMapping("{id}/vote")
+    Vote vote(
+            @PathVariable("id") @NotBlank String id,
+            @RequestBody @Valid Vote vote
+    ) {
+        roomService.vote(id, vote.getParticipant(), vote.getCard());
+        return vote;
+    }
+
+    @GetMapping("{id}/clearVotingResult")
+    void clearVotingResult(@PathVariable("id") @NotBlank String id) {
+        roomService.clearVotingResult(id);
     }
 }

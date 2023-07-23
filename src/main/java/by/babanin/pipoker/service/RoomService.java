@@ -8,9 +8,11 @@ import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
+import by.babanin.pipoker.dto.Card;
 import by.babanin.pipoker.dto.Deck;
 import by.babanin.pipoker.dto.Participant;
 import by.babanin.pipoker.dto.Room;
+import by.babanin.pipoker.dto.VotingResult;
 
 @Service
 public class RoomService {
@@ -95,5 +97,15 @@ public class RoomService {
             remove(room.getId());
         }
         return participant;
+    }
+
+    public VotingResult vote(String id, Participant participant, Card card) {
+        VotingResult votingResult = get(id).getVotingResult();
+        votingResult.getMap().put(participant, card);
+        return votingResult;
+    }
+
+    public void clearVotingResult(String id) {
+        get(id).getVotingResult().getMap().clear();
     }
 }
