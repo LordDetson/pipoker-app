@@ -101,7 +101,7 @@ public class RoomService {
 
     public VotingResult vote(String id, Participant participant, Card card) {
         VotingResult votingResult = get(id).getVotingResult();
-        votingResult.getMap().put(participant, card);
+        votingResult.getMap().put(participant.getNickname(), card);
         return votingResult;
     }
 

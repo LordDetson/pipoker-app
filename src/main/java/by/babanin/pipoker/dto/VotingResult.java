@@ -10,5 +10,5 @@ import lombok.Data;
 public class VotingResult {
 
     @Size(max = 20)
-    private final Map<Participant, Card> map = new HashMap<>();
+    private final Map<String, Card> map = new HashMap<>();
 }
