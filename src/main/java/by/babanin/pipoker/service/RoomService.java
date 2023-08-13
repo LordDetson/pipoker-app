@@ -96,6 +96,9 @@ public class RoomService {
         if(participants.isEmpty()) {
             remove(room.getId());
         }
+        else {
+            room.getVotingResult().getMap().remove(participant.getNickname());
+        }
         return participant;
     }
 
