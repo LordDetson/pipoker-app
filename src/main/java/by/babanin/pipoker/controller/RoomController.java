@@ -2,6 +2,7 @@ package by.babanin.pipoker.controller;
 
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +27,7 @@ import jakarta.validation.constraints.NotBlank;
 @RestController
 @Validated
 @RequestMapping("/api/room")
+@CrossOrigin(maxAge = 3600)
 public class RoomController {
 
     private static final String ROOM_TOPIC_FORMAT = "/topic/room.%s";

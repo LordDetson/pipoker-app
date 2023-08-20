@@ -11,23 +11,44 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    @Value("${origin}")
-    private String origin;
+    @Value("${app.broker.destinations:/topic}")
+    private String[] stompBrokerDestinationPrefixes;
+
+    @Value("${app.broker.host:localhost}")
+    private String stompBrokerHost;
+
+    @Value("${app.broker.port:61613}")
+    private int stompBrokerPort;
+
+    @Value("${app.broker.login}")
+    private String brokerClientLogin;
+
+    @Value("${app.broker.pass}")
+    private String brokerClientPasscode;
+
+    @Value("${app.destinations:/app}")
+    private String appDestinationPrefixes;
+
+    @Value("${app.stomp.endpoint.paths:/ws}")
+    private String[] applicationDestinationPrefixes;
+
+    @Value("${app.stomp.endpoint.allowedOriginPatterns:*}")
+    private String[] allowedOriginPatterns;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableStompBrokerRelay("/topic")
-                .setRelayHost("localhost")
-                .setRelayPort(61613)
-                .setClientLogin("guest")
-                .setClientPasscode("guest");
-        registry.setApplicationDestinationPrefixes("/app");
+        registry.enableStompBrokerRelay(stompBrokerDestinationPrefixes)
+                .setRelayHost(stompBrokerHost)
+                .setRelayPort(stompBrokerPort)
+                .setClientLogin(brokerClientLogin)
+                .setClientPasscode(brokerClientPasscode);
+        registry.setApplicationDestinationPrefixes(appDestinationPrefixes);
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws")
-                .setAllowedOrigins(origin)
+        registry.addEndpoint(applicationDestinationPrefixes)
+                .setAllowedOriginPatterns(allowedOriginPatterns)
                 .withSockJS();
     }
 }
