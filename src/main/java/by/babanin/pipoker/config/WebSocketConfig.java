@@ -41,7 +41,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setRelayHost(stompBrokerHost)
                 .setRelayPort(stompBrokerPort)
                 .setClientLogin(brokerClientLogin)
-                .setClientPasscode(brokerClientPasscode);
+                .setClientPasscode(brokerClientPasscode)
+                .setSystemLogin(brokerClientLogin)
+                .setSystemPasscode(brokerClientPasscode);
         registry.setApplicationDestinationPrefixes(appDestinationPrefixes);
     }
 
