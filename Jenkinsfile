@@ -23,12 +23,13 @@ pipeline {
         CONTAINER_NAME = "pipoker-api"
         IMAGE_NAME = "lorddetson/pipoker-api"
         APP_PORT = "8080"
+        BROKER_HOST = "rebbitmq"
         APP_BROKER_LOGIN = credentials("BrokerLogin")
       }
       steps {
         sh "docker rm -f $CONTAINER_NAME"
         sh "docker rmi $IMAGE_NAME"
-        sh "docker run -d --name $CONTAINER_NAME -p 81:$APP_PORT --network pipokernet -e APP_PORT=$APP_PORT -e APP_BROKER_LOGIN=$APP_BROKER_LOGIN_USR -e APP_BROKER_PASS=$APP_BROKER_LOGIN_PSW $IMAGE_NAME --spring.profiles.active=prod"
+        sh "docker run -d --name $CONTAINER_NAME -p 81:$APP_PORT --network pipokernet -e APP_PORT=$APP_PORT -e APP_BROKER_HOST=$BROKER_HOST -e APP_BROKER_LOGIN=$APP_BROKER_LOGIN_USR -e APP_BROKER_PASS=$APP_BROKER_LOGIN_PSW $IMAGE_NAME --spring.profiles.active=prod"
       }
     }
   }
