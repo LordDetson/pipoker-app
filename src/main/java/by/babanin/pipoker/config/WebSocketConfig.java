@@ -11,45 +11,51 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    @Value("${app.broker.destinations:/topic}")
+    @Value("${broker.stomp.destination.prefixes:/topic}")
     private String[] stompBrokerDestinationPrefixes;
 
-    @Value("${app.broker.host:localhost}")
-    private String stompBrokerHost;
+    @Value("${broker.host:localhost}")
+    private String brokerHost;
 
-    @Value("${app.broker.port:61613}")
+    @Value("${broker.stomp.port:61613}")
     private int stompBrokerPort;
 
-    @Value("${app.broker.login}")
-    private String brokerClientLogin;
+    @Value("${broker.stomp.system.login}")
+    private String stompBrokerSystemLogin;
 
-    @Value("${app.broker.pass}")
-    private String brokerClientPasscode;
+    @Value("${broker.stomp.system.pass}")
+    private String stompBrokerSystemPasscode;
 
-    @Value("${app.destinations:/app}")
-    private String appDestinationPrefixes;
+    @Value("${broker.stomp.user.login}")
+    private String stompBrokerClientLogin;
 
-    @Value("${app.stomp.endpoint.paths:/ws}")
-    private String[] applicationDestinationPrefixes;
+    @Value("${broker.stomp.user.pass}")
+    private String stompBrokerClientPasscode;
 
-    @Value("${app.stomp.endpoint.allowedOriginPatterns:*}")
+    @Value("${broker.app.destination.prefixes:/app}")
+    private String[] brokerAppDestinationPrefixes;
+
+    @Value("${broker.stomp.endpoint.paths:/ws}")
+    private String[] stompEndpoints;
+
+    @Value("${broker.stomp.endpoint.allowedOriginPatterns:*}")
     private String[] allowedOriginPatterns;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableStompBrokerRelay(stompBrokerDestinationPrefixes)
-                .setRelayHost(stompBrokerHost)
+        registry.setApplicationDestinationPrefixes(brokerAppDestinationPrefixes)
+                .enableStompBrokerRelay(stompBrokerDestinationPrefixes)
+                .setRelayHost(brokerHost)
                 .setRelayPort(stompBrokerPort)
-                .setClientLogin(brokerClientLogin)
-                .setClientPasscode(brokerClientPasscode)
-                .setSystemLogin(brokerClientLogin)
-                .setSystemPasscode(brokerClientPasscode);
-        registry.setApplicationDestinationPrefixes(appDestinationPrefixes);
+                .setSystemLogin(stompBrokerSystemLogin)
+                .setSystemPasscode(stompBrokerSystemPasscode)
+                .setClientLogin(stompBrokerClientLogin)
+                .setClientPasscode(stompBrokerClientPasscode);
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint(applicationDestinationPrefixes)
+        registry.addEndpoint(stompEndpoints)
                 .setAllowedOriginPatterns(allowedOriginPatterns)
                 .withSockJS();
     }
