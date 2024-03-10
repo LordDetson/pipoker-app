@@ -13,13 +13,12 @@ import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomDto;
 import by.babanin.pipoker.model.VoteDto;
-import by.babanin.pipoker.service.RoomService;
 
 @Configuration
 public class ModelMapperConfig {
 
     @Bean
-    ModelMapper modelMapper(RoomService roomService) {
+    ModelMapper modelMapper() {
         ModelMapper modelMapper = new ModelMapper();
 
         modelMapper.addConverter(context -> {
@@ -43,14 +42,6 @@ public class ModelMapperConfig {
                     .card(vote.getCard().getValue())
                     .build();
         }, Vote.class, VoteDto.class);
-
-        modelMapper.addConverter(context -> {
-            VoteDto voteDto = context.getSource();
-            Room room = roomService.get(voteDto.getRoomId());
-            Participant participant = room.getParticipant(voteDto.getNickname());
-            Card card = room.getDeck().get(voteDto.getCard());
-            return new Vote(participant, card);
-        }, VoteDto.class, Vote.class);
 
         modelMapper.addConverter(context -> {
             Participant participant = context.getSource();
