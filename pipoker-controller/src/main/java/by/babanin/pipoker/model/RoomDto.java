@@ -1,7 +1,6 @@
 package by.babanin.pipoker.model;
 
 import java.util.LinkedHashSet;
-import java.util.Set;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -40,9 +39,9 @@ public class RoomDto {
 
     @NotNull
     @JsonDeserialize(as = LinkedHashSet.class)
-    private final Set<ParticipantDto> participants = new LinkedHashSet<>();
+    private final LinkedHashSet<ParticipantDto> participants = new LinkedHashSet<>();
 
     @NotNull
     @JsonDeserialize(as = LinkedHashSet.class)
-    private final Set<VoteDto> votes = new LinkedHashSet<>();
+    private final LinkedHashSet<VoteDto> votes = new LinkedHashSet<>();
 }

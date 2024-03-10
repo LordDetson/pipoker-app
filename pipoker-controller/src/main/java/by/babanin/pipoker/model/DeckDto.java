@@ -1,7 +1,6 @@
 package by.babanin.pipoker.model;
 
 import java.util.LinkedHashSet;
-import java.util.Set;
 import java.util.StringJoiner;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -20,11 +19,12 @@ public class DeckDto {
     @NotEmpty
     @Size(min = 1, max = 20)
     @JsonDeserialize(as = LinkedHashSet.class)
-    private final Set<String> cards = new LinkedHashSet<>();
+    private final LinkedHashSet<String> cards = new LinkedHashSet<>();
 
     @Override
     public String toString() {
         StringJoiner joiner = new StringJoiner("; ", "[", "]");
+        joiner.setEmptyValue("Doesn't have cards");
         cards.forEach(joiner::add);
         return joiner.toString();
     }

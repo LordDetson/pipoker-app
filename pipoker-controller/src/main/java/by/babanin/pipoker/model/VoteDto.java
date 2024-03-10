@@ -1,7 +1,5 @@
 package by.babanin.pipoker.model;
 
-import java.util.UUID;
-
 import by.babanin.pipoker.entity.Participant;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -20,15 +18,15 @@ import lombok.ToString;
 public class VoteDto implements Comparable<VoteDto> {
 
     @NotNull
-    @EqualsAndHashCode.Include
-    private UUID roomId;
-
-    @NotNull
-    @EqualsAndHashCode.Include
     private String nickname;
 
     @NotNull
     private String card;
+
+    @EqualsAndHashCode.Include
+    public String normalizeNickname() {
+        return Participant.normalizeNickname(nickname);
+    }
 
     @Override
     public int compareTo(VoteDto vote) {

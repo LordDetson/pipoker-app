@@ -1,8 +1,8 @@
 package by.babanin.pipoker.service;
 
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.commons.collections4.CollectionUtils;
@@ -35,10 +35,10 @@ public class RoomService {
     // Rooms
 
     public Room create(String name, Deck deck) {
-        return create(name, deck, Collections.emptyList());
+        return create(name, deck, Collections.emptySet());
     }
 
-    public Room create(String name, Deck deck, List<Participant> participants) {
+    public Room create(String name, Deck deck, Set<Participant> participants) {
         if(deck == null) {
             throw new RoomServiceException("Deck can't be null");
         }
@@ -136,5 +136,12 @@ public class RoomService {
                         () -> room.addVote(nickname, vote.getCard().getValue())));
         roomRepository.save(room);
         return removed;
+    }
+
+    public void clearVotes(UUID roomId) {
+        Room room = get(roomId);
+        room.clearVotes();
+        AppUtils.validateAndThrow(validator, room, RoomServiceException::new);
+        roomRepository.save(room);
     }
 }

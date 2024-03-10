@@ -77,6 +77,7 @@ public class Deck {
     @Override
     public String toString() {
         StringJoiner joiner = new StringJoiner("; ", "[", "]");
+        joiner.setEmptyValue("Doesn't have cards");
         cards.forEach(card -> joiner.add(card.getValue()));
         return joiner.toString();
     }
