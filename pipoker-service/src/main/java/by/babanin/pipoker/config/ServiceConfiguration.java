@@ -51,7 +51,8 @@ public class ServiceConfiguration {
                     .append(Room.VOTES, entries("$voteMap", new Document("participant", voter).append("card", "$$entry.v.card"))));
             Document unset = new Document("$unset", List.of("participantMap", "voteMap"));
             mongoTemplate.updateMulti(Query.query(Criteria.where("participantMap").exists(true)),
-                    AggregationUpdate.from(List.of(context -> set, context -> unset)), Room.COLLECTION);
+                    AggregationUpdate.from(List.of(context -> set, context -> unset)),
+                    mongoTemplate.getCollectionName(Room.class));
         };
     }
 

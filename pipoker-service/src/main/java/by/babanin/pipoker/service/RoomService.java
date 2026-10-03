@@ -61,7 +61,7 @@ public class RoomService {
     }
 
     public Room get(UUID id) {
-        return find(id).orElseThrow(() -> new RoomServiceException(String.format("Room \"%s\" is not found", id)));
+        return find(id).orElseThrow(() -> notFound(id));
     }
 
     public Optional<Room> find(UUID id) {
@@ -79,8 +79,9 @@ public class RoomService {
     }
 
     // Participants
-    // Each change below is one atomic update of the stored room (see RoomChanges), so people acting at the same
-    // moment don't overwrite each other's changes. The room is read only to explain why a change was refused.
+    // Each change below is one atomic update of the stored room (see AtomicRoomRepository), so people acting at the same
+    // moment don't overwrite each other's changes. An update that changed nothing doesn't tell whether the room
+    // is missing, so that is checked afterwards: a missing room is reported as before.
 
     public Participant addWatcher(UUID roomId, String nickname) {
         return addParticipant(roomId, nickname, true);
@@ -99,9 +100,9 @@ public class RoomService {
         }
         AppUtils.validateAndThrow(validator, participant, RoomServiceException::new);
         if(!roomRepository.addParticipant(roomId, participant)) {
-            Room room = get(roomId);
+            checkExists(roomId);
             throw new ConstraintException(String.format("Participant \"%s\" is already exist in the room \"%s\"",
-                    participant.getNickname(), room.getId()));
+                    participant.getNickname(), roomId));
         }
         return participant;
     }
@@ -109,7 +110,7 @@ public class RoomService {
     public Optional<Participant> removeParticipant(UUID roomId, String nickname) {
         Optional<Participant> removed = roomRepository.removeParticipant(roomId, Participant.normalizeNickname(nickname));
         if(removed.isEmpty()) {
-            get(roomId);
+            checkExists(roomId);
         }
         else if(allowRemoveRoomIfNotHaveParticipants) {
             roomRepository.removeIfEmpty(roomId);
@@ -134,7 +135,7 @@ public class RoomService {
     public Optional<Vote> removeVote(UUID roomId, String nickname) {
         Optional<Vote> removed = roomRepository.removeVote(roomId, Participant.normalizeNickname(nickname));
         if(removed.isEmpty()) {
-            get(roomId);
+            checkExists(roomId);
         }
         return removed;
     }
@@ -147,7 +148,17 @@ public class RoomService {
 
     public void clearVotes(UUID roomId) {
         if(!roomRepository.clearVotes(roomId)) {
-            get(roomId);
+            checkExists(roomId);
         }
+    }
+
+    private void checkExists(UUID roomId) {
+        if(!roomRepository.existsById(roomId)) {
+            throw notFound(roomId);
+        }
+    }
+
+    private static RoomServiceException notFound(UUID roomId) {
+        return new RoomServiceException(String.format("Room \"%s\" is not found", roomId));
     }
 }

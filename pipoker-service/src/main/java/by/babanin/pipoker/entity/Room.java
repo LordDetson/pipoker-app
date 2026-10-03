@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
 
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.VoteServiceException;
@@ -27,10 +26,10 @@ import lombok.ToString;
 
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(onlyExplicitlyIncluded = true)
-@Document(Room.COLLECTION)
+@Document("room")
 public class Room {
 
-    public static final String COLLECTION = "room";
+    // Names of the stored fields, used by the atomic updates in AtomicRoomRepositoryImpl
     public static final String PARTICIPANTS = "participants";
     public static final String VOTES = "votes";
     public static final String VOTES_SHOWN = "votesShown";
@@ -54,18 +53,15 @@ public class Room {
     private Deck deck;
 
     // Stored as arrays, not as maps keyed by nickname: each change is one atomic update of these arrays
-    // (see RoomChanges), and a nickname may contain characters that are not allowed in a field name, like a dot.
+    // (see AtomicRoomRepository), and a nickname may contain characters that are not allowed in a field name, like a dot.
     @NotNull
-    @Field(PARTICIPANTS)
-    private List<@Valid Participant> participantList = new CopyOnWriteArrayList<>();
+    private List<@Valid Participant> participants = new CopyOnWriteArrayList<>();
 
     @NotNull
-    @Field(VOTES)
-    private List<Vote> voteList = new CopyOnWriteArrayList<>();
+    private List<Vote> votes = new CopyOnWriteArrayList<>();
 
     // Whether the cards of this round are revealed, so people who join or reconnect later see them too
     @Getter
-    @Field(VOTES_SHOWN)
     private boolean votesShown;
 
     public Room(String name, Deck deck) {
@@ -97,7 +93,7 @@ public class Room {
             throw new ConstraintException(String.format("Participant \"%s\" is already exist in the room \"%s\"", participant.getNickname(),
                     id));
         }
-        participantList.add(participant);
+        participants.add(participant);
         return participant;
     }
 
@@ -106,7 +102,7 @@ public class Room {
     }
 
     public Set<Participant> getParticipants(Comparator<Participant> comparator) {
-        return Collections.unmodifiableSet((Set<? extends Participant>) participantList.stream()
+        return Collections.unmodifiableSet((Set<? extends Participant>) participants.stream()
                 .sorted(comparator)
                 .collect(Collectors.toCollection(LinkedHashSet::new)));
     }
@@ -118,7 +114,7 @@ public class Room {
 
     public Optional<Participant> findParticipant(String nickname) {
         String key = Participant.normalizeNickname(nickname);
-        return participantList.stream()
+        return participants.stream()
                 .filter(participant -> participant.getKey().equals(key))
                 .findFirst();
     }
@@ -128,19 +124,19 @@ public class Room {
     }
 
     public boolean haveParticipants() {
-        return !participantList.isEmpty();
+        return !participants.isEmpty();
     }
 
     public Optional<Participant> removeParticipant(String nickname) {
         removeVote(nickname);
         Optional<Participant> participant = findParticipant(nickname);
-        participant.ifPresent(participantList::remove);
+        participant.ifPresent(participants::remove);
         return participant;
     }
 
     public void clearParticipants() {
         clearVotes();
-        participantList.clear();
+        participants.clear();
     }
 
     // Votes
@@ -153,7 +149,7 @@ public class Room {
         Card card = getDeck().get(cardValue);
         Vote vote = new Vote(participant, card);
         removeVote(nickname);
-        voteList.add(vote);
+        votes.add(vote);
         return vote;
     }
 
@@ -162,7 +158,7 @@ public class Room {
     }
 
     public Set<Vote> getVotes(Comparator<Vote> comparator) {
-        return Collections.unmodifiableSet((Set<? extends Vote>) voteList.stream()
+        return Collections.unmodifiableSet((Set<? extends Vote>) votes.stream()
                 .sorted(comparator)
                 .collect(Collectors.toCollection(LinkedHashSet::new)));
     }
@@ -175,14 +171,14 @@ public class Room {
 
     public Optional<Vote> findVote(String nickname) {
         String key = Participant.normalizeNickname(nickname);
-        return voteList.stream()
+        return votes.stream()
                 .filter(vote -> vote.getParticipant().getKey().equals(key))
                 .findFirst();
     }
 
     public Optional<Vote> removeVote(String nickname) {
         Optional<Vote> vote = findVote(nickname);
-        vote.ifPresent(voteList::remove);
+        vote.ifPresent(votes::remove);
         return vote;
     }
 
@@ -191,7 +187,7 @@ public class Room {
     }
 
     public void clearVotes() {
-        voteList.clear();
+        votes.clear();
         votesShown = false;
     }
 }
