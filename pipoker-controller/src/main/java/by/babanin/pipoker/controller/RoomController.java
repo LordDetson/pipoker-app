@@ -5,8 +5,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.modelmapper.ModelMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
@@ -38,8 +36,6 @@ import jakarta.validation.constraints.NotBlank;
 @Validated
 @MessageMapping(PiPokerApplication.ROOM_DESTINATION_PREFIX)
 public class RoomController {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(RoomController.class);
 
     private final RoomService roomService;
     private final ModelMapper modelMapper;
@@ -129,7 +125,6 @@ public class RoomController {
     @SendToUser(destinations = PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION, broadcast = false)
     ErrorEvent handleException(Exception exception,
             @Header(name = SimpMessageHeaderAccessor.DESTINATION_HEADER, required = false) String destination) {
-        LOGGER.warn("Failed to handle message sent to {}", destination, exception);
         return new ErrorEvent(destination, exception.getMessage());
     }
 }
