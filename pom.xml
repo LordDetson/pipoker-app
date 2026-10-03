@@ -28,6 +28,8 @@
 		<guava.version>33.0.0-jre</guava.version>
 		<jacoco.plugin.version>0.8.11</jacoco.plugin.version>
 		<sonar.plugin.version>3.10.0.2594</sonar.plugin.version>
+		<!-- Docker Engine 29 rejects the API version used by older Testcontainers releases -->
+		<testcontainers.version>1.21.4</testcontainers.version>
 	</properties>
 
 	<dependencies>
@@ -96,6 +98,11 @@
 			<plugin>
 				<groupId>org.sonarsource.scanner.maven</groupId>
 				<artifactId>sonar-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<!-- Runs *IT classes against real MongoDB and RabbitMQ in Docker, skip them with -DskipITs -->
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-failsafe-plugin</artifactId>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

@@ -27,6 +27,11 @@ PiPoker API is built using the following technologies:
 ## Getting Started
 To start using PiPoker API, refer to our comprehensive [documentation](#). It provides detailed information on endpoints, request/response formats, and integration guides. Explore the documentation to quickly integrate PiPoker into your existing applications or build new tools around it.
 
+## Tests
+`./mvnw verify` runs all tests and writes coverage reports to `*/target/site/jacoco`.
+- Unit tests (`*Test`) need nothing but Java: `./mvnw test`.
+- Integration tests (`*IT`) start MongoDB and RabbitMQ in Docker with Testcontainers and drive the application over STOMP the way the web client does. They need a running Docker; skip them with `./mvnw verify -DskipITs`.
+
 ## Contributing
 We welcome contributions from the community to enhance PiPoker. If you have any ideas, bug reports, or feature requests, please feel free to submit them in the Issues section of our GitHub repository. We appreciate your support in making PiPoker even better.
 
