@@ -20,8 +20,33 @@ jobs:
           java-version: 17
           cache: maven
 
+      # Unit tests and integration tests; the integration tests start MongoDB and RabbitMQ in Docker
       - name: Build and test
         run: ./mvnw -B verify
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "| Module | Lines | Branches |"
+            echo "| --- | --- | --- |"
+            for module in pipoker-service pipoker-controller; do
+              report="$module/target/site/jacoco/jacoco.csv"
+              [ -f "$report" ] || continue
+              awk -F, -v module="$module" 'NR > 1 { bm += $6; bc += $7; lm += $8; lc += $9 }
+                END { printf "| %s | %.1f%% | %.1f%% |\n", module, 100 * lc / (lm + lc), bm + bc ? 100 * bc / (bm + bc) : 100 }' "$report"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            */target/site/jacoco/
+            */target/surefire-reports/
+            */target/failsafe-reports/
+          retention-days: 7
 
       - name: Prepare application jar
         run: find pipoker-controller/target -maxdepth 1 -name 'pipoker-controller-*.jar' ! -name '*-sources.jar' -exec cp {} pipoker-controller/target/app.jar \;
