@@ -28,7 +28,7 @@ public class Card {
 
     @EqualsAndHashCode.Include
     public String normalizeValue() {
-        return value.toLowerCase();
+        return normalizeValue(value);
     }
 
     public static String normalizeValue(String value) {

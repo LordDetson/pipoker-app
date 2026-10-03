@@ -15,6 +15,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.VoteServiceException;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -42,11 +43,12 @@ public class Room {
     private String name;
 
     @NotNull
+    @Valid
     @Getter
     private Deck deck;
 
     @NotNull
-    private Map<String, Participant> participantMap = new ConcurrentHashMap<>();
+    private Map<String, @Valid Participant> participantMap = new ConcurrentHashMap<>();
 
     @NotNull
     private Map<String, Vote> voteMap = new ConcurrentHashMap<>();
@@ -73,6 +75,9 @@ public class Room {
     }
 
     private Participant addParticipant(Participant participant) {
+        if(participant.normalizeNickname() == null) {
+            throw new ConstraintException("Nickname can't be blank");
+        }
         if(containsParticipant(participant.getNickname())) {
             throw new ConstraintException(String.format("Participant \"%s\" is already exist in the room \"%s\"", participant.getNickname(),
                     id));

@@ -26,7 +26,9 @@ class RoomTest {
         // Given
         String nickname = "test";
         Participant expected = Participant.createWatcher(nickname);
-        Room room = new Room("test", new Deck());
+        Deck deck = new Deck();
+        deck.add("1");
+        Room room = new Room("test", deck);
         assertTrue(validator.validate(room).isEmpty());
 
         // Then
@@ -52,7 +54,9 @@ class RoomTest {
         // Given
         String nickname = "test";
         Participant expected = Participant.createParticipant(nickname);
-        Room room = new Room("test", new Deck());
+        Deck deck = new Deck();
+        deck.add("1");
+        Room room = new Room("test", deck);
         assertTrue(validator.validate(room).isEmpty());
 
         // Then
