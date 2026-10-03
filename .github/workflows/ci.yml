@@ -65,3 +65,13 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:main
+
+  deploy-qa:
+    # Every push to main goes to QA once the deployment server is configured (repository variable DEPLOY_HOST)
+    if: github.event_name == 'push' && vars.DEPLOY_HOST != ''
+    needs: image
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: qa
+      tag: ${{ github.sha }}
+    secrets: inherit
