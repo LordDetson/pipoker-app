@@ -42,9 +42,11 @@ import by.babanin.pipoker.util.StompTestClient;
  * Runs the whole application with the production configuration against real MongoDB and RabbitMQ
  * and drives it over STOMP the way the web client does.
  */
-@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, properties = "presence.grace-period=" + RoomApiIT.GRACE_PERIOD_SECONDS + "s")
 @ActiveProfiles("prod")
 class RoomApiIT {
+
+    static final int GRACE_PERIOD_SECONDS = 2;
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {
@@ -268,6 +270,69 @@ class RoomApiIT {
         assertNoMessage(rooms);
 
         assertEquals(1, roomRepository.count());
+    }
+
+    @Test
+    @DisplayName("Someone whose connection is lost leaves the room after the grace period")
+    void lostConnection() throws Exception {
+        // Given
+        UUID roomId = createRoom(dmitry, "test", List.of("1"), new ParticipantDto("Dmitry", false)).getId();
+        String room = "/app/room/" + roomId;
+        BlockingQueue<RoomEvent> events = dmitry.subscribe("/topic/room." + roomId, RoomEvent.class);
+        alex.send(room + "/participants/add", new ParticipantDto("Alex", false));
+        next(events);
+        alex.send(room + "/votes/add", new VoteDto("Alex", "1"));
+        next(events);
+
+        // When
+        alex.close();
+
+        // Then nothing happens at once
+        assertNoMessage(events);
+        assertTrue(roomRepository.findById(roomId).orElseThrow().containsParticipant("Alex"));
+        // and Alex leaves with the vote after the grace period
+        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)), next(events));
+        Room stored = roomRepository.findById(roomId).orElseThrow();
+        assertFalse(stored.containsParticipant("Alex"));
+        assertTrue(stored.getVotes().isEmpty());
+
+        // Coming back now is too late
+        try(StompTestClient alexAgain = connectClient()) {
+            BlockingQueue<ErrorEvent> errors = alexAgain.subscribe("/user/topic/room.errors", ErrorEvent.class);
+            alexAgain.send(room + "/participants/return", "Alex");
+            assertEquals(String.format("Participant \"Alex\" is not in the room \"%s\"", roomId), next(errors).getMessage());
+        }
+
+        // When the last person's connection is lost, the room is deleted
+        dmitry.close();
+        await().atMost(Duration.ofSeconds(GRACE_PERIOD_SECONDS + 10)).until(() -> !roomRepository.existsById(roomId));
+    }
+
+    @Test
+    @DisplayName("Someone who connects again in time keeps the seat and the vote")
+    void reconnectInTime() throws Exception {
+        // Given
+        UUID roomId = createRoom(dmitry, "test", List.of("1"), new ParticipantDto("Dmitry", false)).getId();
+        String room = "/app/room/" + roomId;
+        BlockingQueue<RoomEvent> events = dmitry.subscribe("/topic/room." + roomId, RoomEvent.class);
+        alex.send(room + "/participants/add", new ParticipantDto("Alex", true));
+        next(events);
+
+        // When Alex refreshes the page
+        alex.close();
+        alex = connectClient();
+        BlockingQueue<RoomEvent> returned = alex.subscribe("/user/topic/room.returned", RoomEvent.class);
+        alex.send(room + "/participants/return", "alex");
+
+        // Then
+        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, new ParticipantDto("Alex", true)), next(returned));
+        Thread.sleep(Duration.ofSeconds(GRACE_PERIOD_SECONDS + 1).toMillis());
+        assertNoMessage(events);
+        assertTrue(roomRepository.findById(roomId).orElseThrow().containsParticipant("Alex"));
+
+        // Leaving on purpose still works at once
+        alex.send(room + "/participants/remove", "Alex");
+        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", true)), next(events));
     }
 
     private RoomDto createRoom(StompTestClient client, String name, List<String> cards, ParticipantDto... participants)

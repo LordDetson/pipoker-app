@@ -2,6 +2,8 @@ package by.babanin.pipoker.controller;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
@@ -41,6 +43,7 @@ import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
 import by.babanin.pipoker.model.VoteDto;
+import by.babanin.pipoker.presence.RoomPresence;
 import by.babanin.pipoker.service.RoomService;
 import by.babanin.pipoker.util.TestStompSession;
 
@@ -59,6 +62,9 @@ class RoomControllerTest {
 
     @MockBean
     private RoomService roomService;
+
+    @MockBean
+    private RoomPresence roomPresence;
 
     @Autowired
     private WebSocketStompClient webSocketStompClient;
@@ -135,6 +141,9 @@ class RoomControllerTest {
         // Then
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(expectedResult, results.poll()));
+        // The creator's connection holds the seats of the people in the new room
+        Mockito.verify(roomPresence).hold(eq(room.getId()), eq("Dmitry"), anyString());
+        Mockito.verify(roomPresence).hold(eq(room.getId()), eq("Alex"), anyString());
     }
 
     @Test
@@ -156,6 +165,7 @@ class RoomControllerTest {
         // Then
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, expectedResult), results.poll()));
+        Mockito.verify(roomPresence).hold(eq(roomId), eq("Dmitry"), anyString());
     }
 
     @Test
@@ -177,6 +187,27 @@ class RoomControllerTest {
         // Then
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, expectedResult), results.poll()));
+        Mockito.verify(roomPresence).forget(roomId, "Dmitry");
+    }
+
+    @Test
+    void returnParticipant() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Participant participant = Participant.createWatcher("Dmitry");
+
+        Mockito.when(roomPresence.returnTo(eq(roomId), eq("dmitry"), anyString()))
+                .thenReturn(participant);
+
+        // When
+        Queue<RoomEvent> results = buildUserSession(RoomEvent.class, PiPokerApplication.TOPIC_ROOM_RETURNED_DESTINATION)
+                .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX
+                        + String.format("/%s/participants/return", roomId), "dmitry");
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(
+                        new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, new ParticipantDto("Dmitry", true)), results.poll()));
     }
 
     @Test

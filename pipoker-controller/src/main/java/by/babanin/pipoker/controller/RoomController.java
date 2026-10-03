@@ -28,6 +28,7 @@ import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
 import by.babanin.pipoker.model.VoteDto;
+import by.babanin.pipoker.presence.RoomPresence;
 import by.babanin.pipoker.service.RoomService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -38,21 +39,25 @@ import jakarta.validation.constraints.NotBlank;
 public class RoomController {
 
     private final RoomService roomService;
+    private final RoomPresence roomPresence;
     private final ModelMapper modelMapper;
 
-    public RoomController(RoomService roomService, ModelMapper modelMapper) {
+    public RoomController(RoomService roomService, RoomPresence roomPresence, ModelMapper modelMapper) {
         this.roomService = roomService;
+        this.roomPresence = roomPresence;
         this.modelMapper = modelMapper;
     }
 
     @MessageMapping("/create")
     @SendToUser(destinations = PiPokerApplication.TOPIC_ROOM_CREATED_DESTINATION, broadcast = false)
-    RoomDto create(@Valid RoomCreationDto roomCreationDto) {
+    RoomDto create(@Valid RoomCreationDto roomCreationDto,
+            @Header(SimpMessageHeaderAccessor.SESSION_ID_HEADER) String sessionId) {
         Deck deck = modelMapper.map(roomCreationDto.getDeck(), Deck.class);
         Set<Participant> participants = roomCreationDto.getParticipants().stream()
                 .map(participantDto -> modelMapper.map(participantDto, Participant.class))
                 .collect(Collectors.toUnmodifiableSet());
         Room room = roomService.create(roomCreationDto.getName(), deck, participants);
+        room.getParticipants().forEach(participant -> roomPresence.hold(room.getId(), participant.getNickname(), sessionId));
         RoomDto result = modelMapper.map(room, RoomDto.class);
         modelMapper.validate();
         return result;
@@ -68,11 +73,13 @@ public class RoomController {
 
     @MessageMapping({ "/{roomId}/participants/add", "/{roomId}/join" })
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
-    RoomEvent addParticipant(@DestinationVariable UUID roomId, @Valid ParticipantDto participantDto) {
+    RoomEvent addParticipant(@DestinationVariable UUID roomId, @Valid ParticipantDto participantDto,
+            @Header(SimpMessageHeaderAccessor.SESSION_ID_HEADER) String sessionId) {
         String nickname = participantDto.getNickname();
         Participant added = participantDto.isWatcher()
                 ? roomService.addWatcher(roomId, nickname)
                 : roomService.addParticipant(roomId, nickname);
+        roomPresence.hold(roomId, added.getNickname(), sessionId);
         ParticipantDto result = modelMapper.map(added, ParticipantDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, result);
@@ -84,8 +91,20 @@ public class RoomController {
         ParticipantDto result = roomService.removeParticipant(roomId, nickname)
                 .map(participant -> modelMapper.map(participant, ParticipantDto.class))
                 .orElse(null);
+        roomPresence.forget(roomId, nickname);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, result);
+    }
+
+    // A browser that lost its connection comes back to the seat it had, while the participant is still in the room
+    @MessageMapping("/{roomId}/participants/return")
+    @SendToUser(destinations = PiPokerApplication.TOPIC_ROOM_RETURNED_DESTINATION, broadcast = false)
+    RoomEvent returnParticipant(@DestinationVariable UUID roomId, @NotBlank String nickname,
+            @Header(SimpMessageHeaderAccessor.SESSION_ID_HEADER) String sessionId) {
+        Participant participant = roomPresence.returnTo(roomId, nickname, sessionId);
+        ParticipantDto result = modelMapper.map(participant, ParticipantDto.class);
+        modelMapper.validate();
+        return new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, result);
     }
 
     @MessageMapping({ "/{roomId}/votes/add", "/{roomId}/vote" })
