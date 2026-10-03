@@ -56,6 +56,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Frames of one connection are handled one after another, in the order they came. Otherwise they run on
+        // different threads, and an UNSUBSCRIBE sent right after its SUBSCRIBE can reach RabbitMQ first. RabbitMQ
+        // answers it with ERROR, and Spring closes the browser's connection after any ERROR.
+        registry.setPreserveReceiveOrder(true);
         registry.addEndpoint(stompEndpoints)
                 .setAllowedOriginPatterns(allowedOriginPatterns)
                 .withSockJS();
