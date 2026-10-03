@@ -40,15 +40,15 @@ public class ServiceConfiguration {
     @Bean
     ApplicationRunner storeRoomsWithArrays(MongoTemplate mongoTemplate) {
         return arguments -> {
-            Document participant = new Document("nickname", "$$entry.v.nickname")
-                    .append("watcher", "$$entry.v.watcher")
-                    .append("key", "$$entry.k");
-            Document voter = new Document("nickname", "$$entry.v.participant.nickname")
-                    .append("watcher", "$$entry.v.participant.watcher")
-                    .append("key", "$$entry.k");
+            Document participant = new Document("key", "$$entry.k")
+                    .append("nickname", "$$entry.v.nickname")
+                    .append("watcher", "$$entry.v.watcher");
+            Document voter = new Document("key", "$$entry.k")
+                    .append("nickname", "$$entry.v.participant.nickname")
+                    .append("watcher", "$$entry.v.participant.watcher");
             Document set = new Document("$set", new Document()
-                    .append(Room.PARTICIPANTS, entries("$participantMap", participant))
-                    .append(Room.VOTES, entries("$voteMap", new Document("participant", voter).append("card", "$$entry.v.card"))));
+                    .append("participants", entries("$participantMap", participant))
+                    .append("votes", entries("$voteMap", new Document("participant", voter).append("card", "$$entry.v.card"))));
             Document unset = new Document("$unset", List.of("participantMap", "voteMap"));
             mongoTemplate.updateMulti(Query.query(Criteria.where("participantMap").exists(true)),
                     AggregationUpdate.from(List.of(context -> set, context -> unset)),
