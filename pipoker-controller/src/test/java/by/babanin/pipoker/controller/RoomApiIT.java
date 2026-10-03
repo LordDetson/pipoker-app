@@ -335,6 +335,21 @@ class RoomApiIT {
         assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", true)), next(events));
     }
 
+    @Test
+    @DisplayName("Dropping a subscription right after making it keeps the connection")
+    void subscribeAndUnsubscribeAtOnce() throws Exception {
+        UUID roomId = createRoom(dmitry, "Sprint", List.of("1"), new ParticipantDto("Dmitry", false)).getId();
+
+        // Each pair is two frames back to back. If the UNSUBSCRIBE overtook its SUBSCRIBE, RabbitMQ would answer
+        // with ERROR and the connection would be closed.
+        for(int i = 0; i < 200; i++) {
+            alex.subscribeAndUnsubscribe("/user/topic/room.errors");
+        }
+
+        assertEquals(roomId, alex.request("/app/room/" + roomId, RoomDto.class).getId());
+        assertTrue(alex.isConnected());
+    }
+
     private RoomDto createRoom(StompTestClient client, String name, List<String> cards, ParticipantDto... participants)
             throws Exception {
         BlockingQueue<RoomDto> rooms = client.subscribe("/user/topic/room.created", RoomDto.class);

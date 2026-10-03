@@ -77,6 +77,18 @@ public class StompTestClient implements AutoCloseable {
         return messages;
     }
 
+    /**
+     * Subscribes and unsubscribes at once, without waiting for the broker, like the web client does when it gives up
+     * on a subscription it has just made.
+     */
+    public void subscribeAndUnsubscribe(String destination) {
+        session.subscribe(destination, new QueueFrameHandler<>(Object.class, new LinkedBlockingQueue<>())).unsubscribe();
+    }
+
+    public boolean isConnected() {
+        return session.isConnected();
+    }
+
     public <T> T request(String destination, Class<T> type) throws InterruptedException {
         return next(subscribeToApplication(destination, type));
     }
