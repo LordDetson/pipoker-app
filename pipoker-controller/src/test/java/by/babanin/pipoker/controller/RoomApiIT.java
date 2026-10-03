@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -306,6 +307,30 @@ class RoomApiIT {
         // When the last person's connection is lost, the room is deleted
         dmitry.close();
         await().atMost(Duration.ofSeconds(GRACE_PERIOD_SECONDS + 10)).until(() -> !roomRepository.existsById(roomId));
+    }
+
+    @Test
+    @DisplayName("Someone who closes the page leaves the room at once")
+    void closedPage() throws Exception {
+        // Given
+        UUID roomId = createRoom(dmitry, "test", List.of("1"), new ParticipantDto("Dmitry", false)).getId();
+        String room = "/app/room/" + roomId;
+        BlockingQueue<RoomEvent> events = dmitry.subscribe("/topic/room." + roomId, RoomEvent.class);
+        alex.send(room + "/participants/add", new ParticipantDto("Alex", false));
+        next(events);
+        alex.send(room + "/votes/add", new VoteDto("Alex", "1"));
+        next(events);
+
+        // When the page says it is being closed, right before its connection closes
+        alex.send("/app/presence/page-closed", "");
+        alex.close();
+
+        // Then Alex leaves with the vote long before the grace period is over
+        RoomEvent left = events.poll(GRACE_PERIOD_SECONDS * 1000 / 2, TimeUnit.MILLISECONDS);
+        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)), left);
+        Room stored = roomRepository.findById(roomId).orElseThrow();
+        assertFalse(stored.containsParticipant("Alex"));
+        assertTrue(stored.getVotes().isEmpty());
     }
 
     @Test
