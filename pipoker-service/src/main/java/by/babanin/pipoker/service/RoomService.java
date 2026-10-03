@@ -13,6 +13,7 @@ import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Vote;
+import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
 import by.babanin.pipoker.util.AppUtils;
@@ -73,6 +74,8 @@ public class RoomService {
     }
 
     // Participants
+    // Each change below is one atomic update of the stored room (see RoomChanges), so people acting at the same
+    // moment don't overwrite each other's changes. The room is read only to explain why a change was refused.
 
     public Participant addWatcher(UUID roomId, String nickname) {
         return addParticipant(roomId, nickname, true);
@@ -83,36 +86,28 @@ public class RoomService {
     }
 
     private Participant addParticipant(UUID roomId, String nickname, boolean watcher) {
-        Room room = get(roomId);
         Participant participant = watcher
-                ? room.addWatcher(nickname)
-                : room.addParticipant(nickname);
-        AppUtils.validateAndThrow(validator, participant, RoomServiceException::new,
-                () -> room.removeParticipant(nickname));
-        AppUtils.validateAndThrow(validator, room, RoomServiceException::new,
-                () -> room.removeParticipant(nickname));
-        roomRepository.save(room);
+                ? Participant.createWatcher(nickname)
+                : Participant.createParticipant(nickname);
+        if(participant.getKey() == null) {
+            throw new ConstraintException("Nickname can't be blank");
+        }
+        AppUtils.validateAndThrow(validator, participant, RoomServiceException::new);
+        if(!roomRepository.addParticipant(roomId, participant)) {
+            Room room = get(roomId);
+            throw new ConstraintException(String.format("Participant \"%s\" is already exist in the room \"%s\"",
+                    participant.getNickname(), room.getId()));
+        }
         return participant;
     }
 
     public Optional<Participant> removeParticipant(UUID roomId, String nickname) {
-        Room room = get(roomId);
-        Optional<Participant> removed = room.removeParticipant(nickname);
-        if(removed.isPresent()) {
-            AppUtils.validateAndThrow(validator, room, RoomServiceException::new, () -> {
-                if(removed.get().isWatcher()) {
-                    room.addWatcher(nickname);
-                }
-                else {
-                    room.addParticipant(nickname);
-                }
-            });
-            if(allowRemoveRoomIfNotHaveParticipants && !room.haveParticipants()) {
-                roomRepository.delete(room);
-            }
-            else {
-                roomRepository.save(room);
-            }
+        Optional<Participant> removed = roomRepository.removeParticipant(roomId, Participant.normalizeNickname(nickname));
+        if(removed.isEmpty()) {
+            get(roomId);
+        }
+        else if(allowRemoveRoomIfNotHaveParticipants) {
+            roomRepository.removeIfEmpty(roomId);
         }
         return removed;
     }
@@ -120,28 +115,28 @@ public class RoomService {
     // Votes
 
     public Vote addVote(UUID roomId, String nickname, String cardValue) {
-        Room room = get(roomId);
-        Vote vote = room.addVote(nickname, cardValue);
-        AppUtils.validateAndThrow(validator, vote, RoomServiceException::new,
-                () -> room.removeVote(nickname));
-        roomRepository.save(room);
+        // The room explains a refused vote: unknown participant, a watcher or a card outside the deck
+        Vote vote = get(roomId).addVote(nickname, cardValue);
+        AppUtils.validateAndThrow(validator, vote, RoomServiceException::new);
+        if(!roomRepository.addVote(roomId, vote)) {
+            // The participant left or the room was deleted after it was read
+            get(roomId).getParticipant(nickname);
+            throw new RoomServiceException(String.format("Vote of \"%s\" can't be stored in the room \"%s\"", nickname, roomId));
+        }
         return vote;
     }
 
     public Optional<Vote> removeVote(UUID roomId, String nickname) {
-        Room room = get(roomId);
-        Optional<Vote> removed = room.removeVote(nickname);
-        removed.ifPresent(vote ->
-                AppUtils.validateAndThrow(validator, room, RoomServiceException::new,
-                        () -> room.addVote(nickname, vote.getCard().getValue())));
-        roomRepository.save(room);
+        Optional<Vote> removed = roomRepository.removeVote(roomId, Participant.normalizeNickname(nickname));
+        if(removed.isEmpty()) {
+            get(roomId);
+        }
         return removed;
     }
 
     public void clearVotes(UUID roomId) {
-        Room room = get(roomId);
-        room.clearVotes();
-        AppUtils.validateAndThrow(validator, room, RoomServiceException::new);
-        roomRepository.save(room);
+        if(!roomRepository.clearVotes(roomId)) {
+            get(roomId);
+        }
     }
 }

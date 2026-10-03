@@ -6,6 +6,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,6 +27,10 @@ public final class Participant implements Comparable<Participant> {
 
     private boolean watcher;
 
+    // The nickname as it is compared: rooms are searched and changed by it in MongoDB
+    @Setter(AccessLevel.NONE)
+    private String key;
+
     public static Participant createParticipant(String nickname) {
         return new Participant(nickname, false);
     }
@@ -37,6 +42,7 @@ public final class Participant implements Comparable<Participant> {
     private Participant(String nickname, boolean watcher) {
         this.nickname = StringUtils.trimToNull(nickname);
         this.watcher = watcher;
+        this.key = normalizeNickname(nickname);
     }
 
     @Override

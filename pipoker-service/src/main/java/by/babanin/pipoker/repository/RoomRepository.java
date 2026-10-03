@@ -8,6 +8,6 @@ import org.springframework.stereotype.Repository;
 import by.babanin.pipoker.entity.Room;
 
 @Repository
-public interface RoomRepository extends MongoRepository<Room, UUID> {
+public interface RoomRepository extends MongoRepository<Room, UUID>, RoomChanges {
 
 }

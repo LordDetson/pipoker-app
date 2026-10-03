@@ -304,102 +304,275 @@ public class RoomServiceTest {
     void addWatcher() {
         // Given
         UUID roomId = UUID.randomUUID();
-        String name = "test";
-        Deck deck = new Deck();
-        deck.add("1h");
-        String nickname = "test";
-        Room expectedRoom = new Room(name, deck);
-
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(expectedRoom));
+        Mockito.when(roomRepository.addParticipant(Mockito.eq(roomId), Mockito.any()))
+                .thenReturn(true);
 
         // When
-        Participant watcher = roomService.addWatcher(roomId, nickname);
+        Participant watcher = roomService.addWatcher(roomId, "test");
 
         // Then
         assertAll(
-                () -> assertNotNull(watcher),
-                () -> assertEquals(nickname, watcher.getNickname()),
+                () -> assertEquals("test", watcher.getNickname()),
                 () -> assertTrue(watcher.isWatcher())
         );
+        Mockito.verify(roomRepository).addParticipant(roomId, watcher);
     }
 
     @Test
-    @DisplayName("Participant creation")
+    @DisplayName("Participant is added to the stored room")
     void addParticipant() {
         // Given
         UUID roomId = UUID.randomUUID();
-        String name = "test";
-        Deck deck = new Deck();
-        deck.add("1h");
-        String nickname = "test";
-        Room expectedRoom = new Room(name, deck);
-
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(expectedRoom));
+        Mockito.when(roomRepository.addParticipant(Mockito.eq(roomId), Mockito.any()))
+                .thenReturn(true);
 
         // When
-        Participant participant = roomService.addParticipant(roomId, nickname);
+        Participant participant = roomService.addParticipant(roomId, " Dmitry ");
 
         // Then
         assertAll(
-                () -> assertNotNull(participant),
-                () -> assertEquals(nickname, participant.getNickname()),
+                () -> assertEquals("Dmitry", participant.getNickname()),
+                () -> assertEquals("dmitry", participant.getKey()),
                 () -> assertFalse(participant.isWatcher())
         );
+        Mockito.verify(roomRepository).addParticipant(roomId, participant);
+        Mockito.verify(roomRepository, Mockito.never()).save(ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Participant with an invalid nickname is not added")
+    void addParticipantWithInvalidNickname() {
+        UUID roomId = UUID.randomUUID();
+
+        RoomServiceException exception = assertThrows(RoomServiceException.class,
+                () -> roomService.addParticipant(roomId, "a"));
+
+        assertTrue(exception.getMessage().startsWith("Participant#nickname - "));
+        Mockito.verify(roomRepository, Mockito.never()).addParticipant(ArgumentMatchers.any(), ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Participant with a blank nickname is not added")
+    void addParticipantWithBlankNickname() {
+        UUID roomId = UUID.randomUUID();
+
+        assertThrows(ConstraintException.class, () -> roomService.addParticipant(roomId, "  "));
+        Mockito.verify(roomRepository, Mockito.never()).addParticipant(ArgumentMatchers.any(), ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Participant with a taken nickname is not added")
+    void addDuplicateParticipant() {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Room room = new Room("test", deck("1h"));
+        room.addParticipant("Dmitry");
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.of(room));
+
+        // When and then: the stored room refuses the nickname
+        ConstraintException exception = assertThrows(ConstraintException.class, () -> roomService.addWatcher(roomId, "dmitry"));
+        assertTrue(exception.getMessage().contains("is already exist"));
+    }
+
+    @Test
+    @DisplayName("Participant can't join a missing room")
+    void addParticipantToMissingRoom() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.empty());
+
+        RoomServiceException exception = assertThrows(RoomServiceException.class,
+                () -> roomService.addParticipant(roomId, "Dmitry"));
+
+        assertEquals(String.format("Room \"%s\" is not found", roomId), exception.getMessage());
     }
 
     @Test
     @DisplayName("Room is kept when a participant leaves and others remain")
-    void removeParticipantKeepsRoomWithRemainingParticipants() {
+    void removeParticipant() {
         // Given
         UUID roomId = UUID.randomUUID();
-        Deck deck = new Deck();
-        deck.add("1h");
-        Room room = new Room("test", deck);
-        room.addParticipant("first");
-        room.addParticipant("second");
-
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
+        Participant first = Participant.createParticipant("First");
+        Mockito.when(roomRepository.removeParticipant(roomId, "first"))
+                .thenReturn(Optional.of(first));
 
         // When
-        Optional<Participant> removed = roomService.removeParticipant(roomId, "first");
+        Optional<Participant> removed = roomService.removeParticipant(roomId, " FIRST ");
 
-        // Then
-        assertTrue(removed.isPresent());
-        assertTrue(room.haveParticipants());
-        Mockito.verify(roomRepository, Mockito.times(1))
-                .save(room);
-        Mockito.verify(roomRepository, Mockito.never())
-                .delete(Mockito.any());
+        // Then: the room is deleted only if nobody is left in it at that moment
+        assertEquals(Optional.of(first), removed);
+        Mockito.verify(roomRepository).removeIfEmpty(roomId);
+        Mockito.verify(roomRepository, Mockito.never()).delete(ArgumentMatchers.any());
     }
 
     @Test
-    @DisplayName("Room is removed when the last participant leaves")
-    void removeLastParticipantRemovesRoom() {
+    @DisplayName("Removing an unknown participant changes nothing")
+    void removeUnknownParticipant() {
         // Given
         UUID roomId = UUID.randomUUID();
-        Deck deck = new Deck();
-        deck.add("1h");
-        Room room = new Room("test", deck);
-        room.addParticipant("last");
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.of(new Room("test", deck("1h"))));
 
+        // When
+        Optional<Participant> removed = roomService.removeParticipant(roomId, "Alex");
+
+        // Then
+        assertTrue(removed.isEmpty());
+        Mockito.verify(roomRepository, Mockito.never()).removeIfEmpty(ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Leaving a missing room fails")
+    void removeParticipantFromMissingRoom() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(RoomServiceException.class, () -> roomService.removeParticipant(roomId, "Dmitry"));
+    }
+
+    @Test
+    @DisplayName("Room is kept after the last participant leaves when removal is turned off")
+    void removeLastParticipantKeepsRoomWhenRemovalIsOff() {
+        // Given
+        RoomRepository repository = Mockito.mock(RoomRepository.class);
+        RoomService service = new RoomService(repository, validator);
+        ReflectionTestUtils.setField(service, "allowRemoveRoomIfNotHaveParticipants", false);
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(repository.removeParticipant(roomId, "last"))
+                .thenReturn(Optional.of(Participant.createParticipant("last")));
+
+        // When
+        service.removeParticipant(roomId, "last");
+
+        // Then
+        Mockito.verify(repository, Mockito.never()).removeIfEmpty(ArgumentMatchers.any());
+    }
+
+    // Votes
+
+    @Test
+    @DisplayName("Vote is stored with the card from the deck")
+    void addVote() {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Room room = new Room("test", deck("1h", "1d"));
+        room.addParticipant("Dmitry");
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.of(room));
+        Mockito.when(roomRepository.addVote(Mockito.eq(roomId), Mockito.any()))
+                .thenReturn(true);
+
+        // When
+        Vote vote = roomService.addVote(roomId, "dmitry", "1D");
+
+        // Then
+        assertAll(
+                () -> assertEquals("Dmitry", vote.getParticipant().getNickname()),
+                () -> assertEquals("1d", vote.getCard().getValue())
+        );
+        Mockito.verify(roomRepository).addVote(roomId, vote);
+        Mockito.verify(roomRepository, Mockito.never()).save(ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Vote of someone who left after the room was read is rejected")
+    void addVoteAfterLeaving() {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Room before = new Room("test", deck("1h"));
+        before.addParticipant("Dmitry");
+        Room after = new Room("test", deck("1h"));
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.of(before), Optional.of(after));
+        Mockito.when(roomRepository.addVote(Mockito.eq(roomId), Mockito.any()))
+                .thenReturn(false);
+
+        // When and then
+        assertThrows(ConstraintException.class, () -> roomService.addVote(roomId, "Dmitry", "1h"));
+    }
+
+    @Test
+    @DisplayName("Watcher's vote is rejected")
+    void addWatcherVote() {
+        UUID roomId = UUID.randomUUID();
+        Room room = new Room("test", deck("1h"));
+        room.addWatcher("Alex");
         Mockito.when(roomRepository.findById(roomId))
                 .thenReturn(Optional.of(room));
 
-        // When
-        Optional<Participant> removed = roomService.removeParticipant(roomId, "last");
-
-        // Then
-        assertTrue(removed.isPresent());
-        assertFalse(room.haveParticipants());
-        Mockito.verify(roomRepository, Mockito.times(1))
-                .delete(room);
-        Mockito.verify(roomRepository, Mockito.never())
-                .save(Mockito.any());
+        assertThrows(VoteServiceException.class, () -> roomService.addVote(roomId, "Alex", "1h"));
+        Mockito.verify(roomRepository, Mockito.never()).addVote(ArgumentMatchers.any(), ArgumentMatchers.any());
     }
 
+    @Test
+    @DisplayName("Vote with a card outside the deck is rejected")
+    void addVoteWithUnknownCard() {
+        UUID roomId = UUID.randomUUID();
+        Room room = new Room("test", deck("1h"));
+        room.addParticipant("Dmitry");
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.of(room));
+
+        assertThrows(ConstraintException.class, () -> roomService.addVote(roomId, "Dmitry", "2h"));
+        Mockito.verify(roomRepository, Mockito.never()).addVote(ArgumentMatchers.any(), ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Vote removal")
+    void removeVote() {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Room room = new Room("test", deck("1h"));
+        room.addParticipant("Dmitry");
+        Vote vote = room.addVote("Dmitry", "1h");
+        Mockito.when(roomRepository.removeVote(roomId, "dmitry"))
+                .thenReturn(Optional.of(vote));
+
+        // When
+        Optional<Vote> removed = roomService.removeVote(roomId, "Dmitry");
+
+        // Then
+        assertEquals(Optional.of(vote), removed);
+    }
+
+    @Test
+    @DisplayName("Removing a missing vote returns nothing")
+    void removeMissingVote() {
+        UUID roomId = UUID.randomUUID();
+        Room room = new Room("test", deck("1h"));
+        room.addParticipant("Dmitry");
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.of(room));
+
+        assertTrue(roomService.removeVote(roomId, "Dmitry").isEmpty());
+    }
+
+    @Test
+    @DisplayName("Clearing votes")
+    void clearVotes() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.clearVotes(roomId))
+                .thenReturn(true);
+
+        roomService.clearVotes(roomId);
+
+        Mockito.verify(roomRepository).clearVotes(roomId);
+        Mockito.verify(roomRepository, Mockito.never()).findById(ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Clearing votes of a missing room fails")
+    void clearVotesOfMissingRoom() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(RoomServiceException.class, () -> roomService.clearVotes(roomId));
+    }
+
+    // Rooms with participants
 
     @Test
     @DisplayName("Room creation with participants and watchers")
@@ -434,245 +607,6 @@ public class RoomServiceTest {
 
         assertThrows(RoomServiceException.class, () -> roomService.create("a", deck));
         Mockito.verify(roomRepository, Mockito.never()).save(ArgumentMatchers.any());
-    }
-
-    @Test
-    @DisplayName("Participant is saved to the room")
-    void addParticipantSavesRoom() {
-        // Given
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When
-        roomService.addParticipant(roomId, "Dmitry");
-
-        // Then
-        assertTrue(room.containsParticipant("Dmitry"));
-        Mockito.verify(roomRepository).save(room);
-    }
-
-    @Test
-    @DisplayName("Participant with an invalid nickname is not added")
-    void addParticipantWithInvalidNickname() {
-        // Given
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When
-        RoomServiceException exception = assertThrows(RoomServiceException.class,
-                () -> roomService.addParticipant(roomId, "a"));
-
-        // Then
-        assertTrue(exception.getMessage().startsWith("Participant#nickname - "));
-        assertFalse(room.haveParticipants());
-        Mockito.verify(roomRepository, Mockito.never()).save(ArgumentMatchers.any());
-    }
-
-    @Test
-    @DisplayName("Participant with a taken nickname is not added")
-    void addDuplicateParticipant() {
-        // Given
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addParticipant("Dmitry");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When and then
-        assertThrows(ConstraintException.class, () -> roomService.addWatcher(roomId, "dmitry"));
-        assertFalse(room.getParticipant("Dmitry").isWatcher());
-        Mockito.verify(roomRepository, Mockito.never()).save(ArgumentMatchers.any());
-    }
-
-    @Test
-    @DisplayName("Participant can't join a missing room")
-    void addParticipantToMissingRoom() {
-        UUID roomId = UUID.randomUUID();
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.empty());
-
-        RoomServiceException exception = assertThrows(RoomServiceException.class,
-                () -> roomService.addParticipant(roomId, "Dmitry"));
-
-        assertEquals(String.format("Room \"%s\" is not found", roomId), exception.getMessage());
-    }
-
-    @Test
-    @DisplayName("Removing an unknown participant changes nothing")
-    void removeUnknownParticipant() {
-        // Given
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addParticipant("Dmitry");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When
-        Optional<Participant> removed = roomService.removeParticipant(roomId, "Alex");
-
-        // Then
-        assertTrue(removed.isEmpty());
-        assertTrue(room.containsParticipant("Dmitry"));
-        Mockito.verify(roomRepository, Mockito.never()).save(ArgumentMatchers.any());
-        Mockito.verify(roomRepository, Mockito.never()).delete(ArgumentMatchers.any());
-    }
-
-    @Test
-    @DisplayName("Removing a participant removes the vote too")
-    void removeParticipantRemovesVote() {
-        // Given
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addParticipant("Dmitry");
-        room.addWatcher("Alex");
-        room.addVote("Dmitry", "1h");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When
-        roomService.removeParticipant(roomId, "Dmitry");
-
-        // Then
-        assertTrue(room.getVotes().isEmpty());
-        Mockito.verify(roomRepository).save(room);
-    }
-
-    @Test
-    @DisplayName("Room is kept after the last participant leaves when removal is turned off")
-    void removeLastParticipantKeepsRoomWhenRemovalIsOff() {
-        // Given
-        RoomRepository repository = Mockito.mock(RoomRepository.class);
-        RoomService service = new RoomService(repository, validator);
-        ReflectionTestUtils.setField(service, "allowRemoveRoomIfNotHaveParticipants", false);
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addParticipant("last");
-        Mockito.when(repository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When
-        service.removeParticipant(roomId, "last");
-
-        // Then
-        Mockito.verify(repository).save(room);
-        Mockito.verify(repository, Mockito.never()).delete(ArgumentMatchers.any());
-    }
-
-    // Votes
-
-    @Test
-    @DisplayName("Vote is saved to the room")
-    void addVote() {
-        // Given
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h", "1d"));
-        room.addParticipant("Dmitry");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When
-        Vote vote = roomService.addVote(roomId, "Dmitry", "1D");
-
-        // Then
-        assertAll(
-                () -> assertEquals("Dmitry", vote.getParticipant().getNickname()),
-                () -> assertEquals("1d", vote.getCard().getValue()),
-                () -> assertEquals(vote, room.getVote("Dmitry"))
-        );
-        Mockito.verify(roomRepository).save(room);
-    }
-
-    @Test
-    @DisplayName("Watcher's vote is rejected")
-    void addWatcherVote() {
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addWatcher("Alex");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        assertThrows(VoteServiceException.class, () -> roomService.addVote(roomId, "Alex", "1h"));
-        Mockito.verify(roomRepository, Mockito.never()).save(ArgumentMatchers.any());
-    }
-
-    @Test
-    @DisplayName("Vote with a card outside the deck is rejected")
-    void addVoteWithUnknownCard() {
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addParticipant("Dmitry");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        assertThrows(ConstraintException.class, () -> roomService.addVote(roomId, "Dmitry", "2h"));
-        assertTrue(room.getVotes().isEmpty());
-        Mockito.verify(roomRepository, Mockito.never()).save(ArgumentMatchers.any());
-    }
-
-    @Test
-    @DisplayName("Vote removal")
-    void removeVote() {
-        // Given
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addParticipant("Dmitry");
-        Vote vote = room.addVote("Dmitry", "1h");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When
-        Optional<Vote> removed = roomService.removeVote(roomId, "Dmitry");
-
-        // Then
-        assertEquals(Optional.of(vote), removed);
-        assertTrue(room.getVotes().isEmpty());
-        Mockito.verify(roomRepository).save(room);
-    }
-
-    @Test
-    @DisplayName("Removing a missing vote returns nothing")
-    void removeMissingVote() {
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addParticipant("Dmitry");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        assertTrue(roomService.removeVote(roomId, "Dmitry").isEmpty());
-    }
-
-    @Test
-    @DisplayName("Clearing votes")
-    void clearVotes() {
-        // Given
-        UUID roomId = UUID.randomUUID();
-        Room room = new Room("test", deck("1h"));
-        room.addParticipant("Dmitry");
-        room.addVote("Dmitry", "1h");
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.of(room));
-
-        // When
-        roomService.clearVotes(roomId);
-
-        // Then
-        assertTrue(room.getVotes().isEmpty());
-        assertTrue(room.containsParticipant("Dmitry"));
-        Mockito.verify(roomRepository).save(room);
-    }
-
-    @Test
-    @DisplayName("Clearing votes of a missing room fails")
-    void clearVotesOfMissingRoom() {
-        UUID roomId = UUID.randomUUID();
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.empty());
-
-        assertThrows(RoomServiceException.class, () -> roomService.clearVotes(roomId));
     }
 
     private static Deck deck(String... cardValues) {
