@@ -154,6 +154,8 @@ class RoomApiIT {
         RoomEvent shown = new RoomEvent(roomId, EventType.SHOW_VOTES);
         assertEquals(shown, next(dmitryEvents));
         assertEquals(shown, next(alexEvents));
+        // Someone opening the room now sees the cards revealed
+        assertTrue(alex.request(room, RoomDto.class).isVotesShown());
 
         // Alex takes the vote back
         alex.send(room + "/votes/remove", "Alex");
@@ -173,6 +175,7 @@ class RoomApiIT {
         RoomDto state = alex.request(room, RoomDto.class);
         assertEquals(2, state.getParticipants().size());
         assertTrue(state.getVotes().isEmpty());
+        assertFalse(state.isVotesShown());
     }
 
     @Test

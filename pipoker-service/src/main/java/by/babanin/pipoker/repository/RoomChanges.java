@@ -43,6 +43,15 @@ public interface RoomChanges {
     Optional<Vote> removeVote(UUID roomId, String key);
 
     /**
+     * Reveals the cards of the current round.
+     *
+     * @return false when the room is missing
+     */
+    boolean showVotes(UUID roomId);
+
+    /**
+     * Starts a new round: no votes, cards hidden.
+     *
      * @return false when the room is missing
      */
     boolean clearVotes(UUID roomId);

@@ -78,8 +78,14 @@ class RoomChangesImpl implements RoomChanges {
     }
 
     @Override
+    public boolean showVotes(UUID roomId) {
+        Update update = new Update().set(Room.VOTES_SHOWN, true);
+        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
+    }
+
+    @Override
     public boolean clearVotes(UUID roomId) {
-        Update update = new Update().set(Room.VOTES, List.of());
+        Update update = new Update().set(Room.VOTES, List.of()).set(Room.VOTES_SHOWN, false);
         return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 

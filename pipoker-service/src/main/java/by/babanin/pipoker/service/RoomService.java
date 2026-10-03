@@ -134,6 +134,12 @@ public class RoomService {
         return removed;
     }
 
+    public void showVotes(UUID roomId) {
+        if(!roomRepository.showVotes(roomId)) {
+            get(roomId);
+        }
+    }
+
     public void clearVotes(UUID roomId) {
         if(!roomRepository.clearVotes(roomId)) {
             get(roomId);

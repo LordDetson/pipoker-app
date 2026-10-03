@@ -141,6 +141,31 @@ class RoomServiceIT {
     }
 
     @Test
+    @DisplayName("Revealed cards stay revealed for everyone until the next round")
+    void votesShown() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        roomService.addVote(roomId, "Dmitry", "1");
+        assertFalse(roomService.get(roomId).isVotesShown());
+
+        // When
+        roomService.showVotes(roomId);
+        roomService.addParticipant(roomId, "Alex");
+
+        // Then
+        assertTrue(roomService.get(roomId).isVotesShown());
+
+        // When
+        roomService.clearVotes(roomId);
+
+        // Then
+        Room nextRound = roomService.get(roomId);
+        assertFalse(nextRound.isVotesShown());
+        assertTrue(nextRound.getVotes().isEmpty());
+        assertThrows(RoomServiceException.class, () -> roomService.showVotes(UUID.randomUUID()));
+    }
+
+    @Test
     @DisplayName("Rejected changes are not stored")
     void rejectedChanges() {
         // Given

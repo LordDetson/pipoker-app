@@ -563,6 +563,16 @@ public class RoomServiceTest {
     }
 
     @Test
+    @DisplayName("Revealing the cards of a missing room fails")
+    void showVotesOfMissingRoom() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(RoomServiceException.class, () -> roomService.showVotes(roomId));
+    }
+
+    @Test
     @DisplayName("Clearing votes of a missing room fails")
     void clearVotesOfMissingRoom() {
         UUID roomId = UUID.randomUUID();

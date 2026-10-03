@@ -44,4 +44,8 @@ public class RoomDto {
     @NotNull
     @JsonDeserialize(as = LinkedHashSet.class)
     private final LinkedHashSet<VoteDto> votes = new LinkedHashSet<>();
+
+    // The cards of the current round are revealed; left out of the JSON while they are hidden
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    private boolean votesShown;
 }

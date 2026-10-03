@@ -33,6 +33,7 @@ public class Room {
     public static final String COLLECTION = "room";
     public static final String PARTICIPANTS = "participants";
     public static final String VOTES = "votes";
+    public static final String VOTES_SHOWN = "votesShown";
 
     @EqualsAndHashCode.Include
     @ToString.Include
@@ -61,6 +62,11 @@ public class Room {
     @NotNull
     @Field(VOTES)
     private List<Vote> voteList = new CopyOnWriteArrayList<>();
+
+    // Whether the cards of this round are revealed, so people who join or reconnect later see them too
+    @Getter
+    @Field(VOTES_SHOWN)
+    private boolean votesShown;
 
     public Room(String name, Deck deck) {
         this.id = UUID.randomUUID();
@@ -180,7 +186,12 @@ public class Room {
         return vote;
     }
 
+    public void showVotes() {
+        votesShown = true;
+    }
+
     public void clearVotes() {
         voteList.clear();
+        votesShown = false;
     }
 }
