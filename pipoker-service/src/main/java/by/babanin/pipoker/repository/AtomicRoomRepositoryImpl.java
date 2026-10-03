@@ -17,14 +17,14 @@ import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Vote;
 
-class RoomChangesImpl implements RoomChanges {
+class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
 
     private static final String PARTICIPANT_KEY = "key";
     private static final String VOTE_KEY = "participant.key";
 
     private final MongoTemplate mongoTemplate;
 
-    RoomChangesImpl(MongoTemplate mongoTemplate) {
+    AtomicRoomRepositoryImpl(MongoTemplate mongoTemplate) {
         this.mongoTemplate = mongoTemplate;
     }
 
