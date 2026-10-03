@@ -85,7 +85,12 @@
                                 <ignoredUsedUndeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.aspectj:aspectjweaver</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.mockito:mockito-core</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>org.mongodb:bson</ignoredUsedUndeclaredDependency>
                             </ignoredUsedUndeclaredDependencies>
+                            <ignoredNonTestScopedDependencies>
+                                <ignoredNonTestScopedDependency>org.springframework*</ignoredNonTestScopedDependency>
+                                <ignoredNonTestScopedDependency>org.mongodb:bson</ignoredNonTestScopedDependency>
+                            </ignoredNonTestScopedDependencies>
                             <!--<ignoredUnusedDeclaredDependencies>
                                 <ignoredUnusedDeclaredDependency>org.springframework*</ignoredUnusedDeclaredDependency>
                                 <ignoredUnusedDeclaredDependency>de.flapdoodle.embed:de.flapdoodle.embed.mongo</ignoredUnusedDeclaredDependency>

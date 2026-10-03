@@ -7,13 +7,14 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.context.annotation.PropertySources;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 
+import by.babanin.pipoker.repository.RoomRepository;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 
 @Configuration
 @Profile("prod")
-@EnableMongoRepositories
+@EnableMongoRepositories(basePackageClasses = RoomRepository.class)
 @PropertySources({
         @PropertySource("classpath:logback.properties"),
         @PropertySource("classpath:mongodbconfig.properties"),

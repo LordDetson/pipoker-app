@@ -17,7 +17,7 @@ public class Deck {
 
     @NotEmpty
     @Size(min = 1, max = 20)
-    private final List<Card> cards = new CopyOnWriteArrayList<>();
+    private List<Card> cards = new CopyOnWriteArrayList<>();
 
     public List<Card> get() {
         return Collections.unmodifiableList(cards);
