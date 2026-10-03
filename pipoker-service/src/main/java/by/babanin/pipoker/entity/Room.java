@@ -55,6 +55,10 @@ public class Room {
     @NotNull
     private List<Vote> votes = new CopyOnWriteArrayList<>();
 
+    // Whether the cards of this round are revealed, so people who join or reconnect later see them too
+    @Getter
+    private boolean votesShown;
+
     public Room(String name, Deck deck) {
         this.id = UUID.randomUUID();
         this.name = name;
@@ -173,7 +177,12 @@ public class Room {
         return vote;
     }
 
+    public void showVotes() {
+        votesShown = true;
+    }
+
     public void clearVotes() {
         votes.clear();
+        votesShown = false;
     }
 }

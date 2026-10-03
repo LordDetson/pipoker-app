@@ -117,7 +117,7 @@ public class RoomController {
     @MessageMapping("/{roomId}/votes/show")
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent showVotes(@DestinationVariable UUID roomId) {
-        roomService.get(roomId);
+        roomService.showVotes(roomId);
         return new RoomEvent(roomId, EventType.SHOW_VOTES);
     }
 

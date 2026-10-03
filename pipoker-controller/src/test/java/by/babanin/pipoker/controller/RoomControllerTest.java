@@ -284,7 +284,7 @@ class RoomControllerTest {
         // Then
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES), results.poll()));
-        Mockito.verify(roomService, times(1)).get(roomId);
+        Mockito.verify(roomService, times(1)).showVotes(roomId);
     }
 
     @Test

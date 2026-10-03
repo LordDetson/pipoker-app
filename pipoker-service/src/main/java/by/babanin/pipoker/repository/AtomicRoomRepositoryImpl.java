@@ -22,6 +22,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     // Names of the stored fields of a room
     private static final String PARTICIPANTS = "participants";
     private static final String VOTES = "votes";
+    private static final String VOTES_SHOWN = "votesShown";
     private static final String PARTICIPANT_KEY = "key";
     private static final String VOTE_KEY = "participant.key";
 
@@ -81,8 +82,14 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     }
 
     @Override
+    public boolean showVotes(UUID roomId) {
+        Update update = new Update().set(VOTES_SHOWN, true);
+        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
+    }
+
+    @Override
     public boolean clearVotes(UUID roomId) {
-        Update update = new Update().set(VOTES, List.of());
+        Update update = new Update().set(VOTES, List.of()).set(VOTES_SHOWN, false);
         return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 
