@@ -68,10 +68,10 @@ public class StompTestClient implements AutoCloseable {
     }
 
     /**
-     * Subscribes to an application destination that answers once, like SUBSCRIBE /app/room/{id}.
-     * The application doesn't confirm such subscriptions, so there is nothing to wait for.
+     * Subscribes without waiting for a confirmation, like the web client does. Application destinations that answer
+     * once, like SUBSCRIBE /app/room/{id}, are subscribed this way: the application doesn't confirm them.
      */
-    public <T> BlockingQueue<T> subscribeToApplication(String destination, Class<T> type) {
+    public <T> BlockingQueue<T> subscribeWithoutWaiting(String destination, Class<T> type) {
         BlockingQueue<T> messages = new LinkedBlockingQueue<>();
         session.subscribe(destination, new QueueFrameHandler<>(type, messages));
         return messages;
@@ -90,7 +90,7 @@ public class StompTestClient implements AutoCloseable {
     }
 
     public <T> T request(String destination, Class<T> type) throws InterruptedException {
-        return next(subscribeToApplication(destination, type));
+        return next(subscribeWithoutWaiting(destination, type));
     }
 
     public void send(String destination, Object payload) {
