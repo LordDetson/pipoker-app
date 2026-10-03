@@ -46,12 +46,13 @@ public class Room {
     private Deck deck;
 
     @NotNull
-    private final Map<String, Participant> participantMap = new ConcurrentHashMap<>();
+    private Map<String, Participant> participantMap = new ConcurrentHashMap<>();
 
     @NotNull
-    private final Map<String, Vote> voteMap = new ConcurrentHashMap<>();
+    private Map<String, Vote> voteMap = new ConcurrentHashMap<>();
 
     public Room(String name, Deck deck) {
+        this.id = UUID.randomUUID();
         this.name = name;
         this.deck = deck;
     }

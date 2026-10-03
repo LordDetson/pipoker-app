@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.AdditionalAnswers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -60,9 +62,8 @@ public class RoomServiceTest {
         Deck deck = new Deck();
         deck.add("1h");
 
-        Room expectedRoom = new Room(roomName, deck);
-        Mockito.when(roomRepository.save(expectedRoom))
-                .thenReturn(expectedRoom);
+        Mockito.when(roomRepository.save(ArgumentMatchers.any(Room.class)))
+                .then(AdditionalAnswers.returnsFirstArg());
 
         // When
         Room room = roomService.create(roomName, deck);
