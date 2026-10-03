@@ -97,11 +97,13 @@
                                 <ignoredUsedUndeclaredDependency>org.mockito:mockito-core</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.mongodb:bson</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.mongodb:mongodb-driver-sync</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>org.mongodb:mongodb-driver-core</ignoredUsedUndeclaredDependency>
                             </ignoredUsedUndeclaredDependencies>
                             <ignoredNonTestScopedDependencies>
                                 <ignoredNonTestScopedDependency>org.springframework*</ignoredNonTestScopedDependency>
                                 <ignoredNonTestScopedDependency>org.mongodb:bson</ignoredNonTestScopedDependency>
                                 <ignoredNonTestScopedDependency>org.mongodb:mongodb-driver-sync</ignoredNonTestScopedDependency>
+                                <ignoredNonTestScopedDependency>org.mongodb:mongodb-driver-core</ignoredNonTestScopedDependency>
                             </ignoredNonTestScopedDependencies>
                             <!--<ignoredUnusedDeclaredDependencies>
                                 <ignoredUnusedDeclaredDependency>org.springframework*</ignoredUnusedDeclaredDependency>

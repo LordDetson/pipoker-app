@@ -6,6 +6,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.AccessLevel;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -18,6 +19,12 @@ import lombok.ToString;
 public final class Participant implements Comparable<Participant> {
 
     public static final Comparator<String> NICKNAME_COMPARATOR = new NicknameComparator();
+
+    // The nickname as it is compared. Nicknames are unique regardless of case and surrounding spaces ("Dmitry" and
+    // " dmitry" are the same person), but MongoDB compares strings exactly, so rooms are searched by this form
+    // in the atomic updates. The old participant map was keyed by it too.
+    @Setter(AccessLevel.NONE)
+    private String key;
 
     @NotBlank
     @Size(min = 2, max = 32)
@@ -35,6 +42,7 @@ public final class Participant implements Comparable<Participant> {
     }
 
     private Participant(String nickname, boolean watcher) {
+        this.key = normalizeNickname(nickname);
         this.nickname = StringUtils.trimToNull(nickname);
         this.watcher = watcher;
     }

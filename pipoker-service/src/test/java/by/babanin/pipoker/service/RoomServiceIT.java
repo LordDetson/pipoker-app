@@ -5,13 +5,22 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import org.bson.BsonBinarySubType;
 import org.bson.BsonDocument;
+import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.test.context.ActiveProfiles;
@@ -19,6 +28,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import com.mongodb.client.MongoCollection;
 
 import by.babanin.pipoker.MongoDbContainer;
 import by.babanin.pipoker.ServiceTestApplication;
@@ -54,6 +65,9 @@ class RoomServiceIT {
 
     @Autowired
     private MongoTemplate mongoTemplate;
+
+    @Autowired
+    private ApplicationRunner storeRoomsWithArrays;
 
     @AfterEach
     void cleanUp() {
@@ -166,6 +180,143 @@ class RoomServiceIT {
         // Then
         assertTrue(roomService.find(roomId).isEmpty());
         assertEquals(0, roomRepository.count());
+    }
+
+    @Test
+    @DisplayName("No join, vote or leave is lost when a whole team acts at the same moment")
+    void simultaneousChanges() throws Exception {
+        // Given
+        UUID roomId = roomService.create("test", deck("1", "2", "3")).getId();
+        List<String> team = IntStream.rangeClosed(1, 12).mapToObj(number -> "Member" + number).toList();
+
+        // When
+        simultaneously(team, nickname -> roomService.addParticipant(roomId, nickname));
+
+        // Then
+        assertEquals(team.size(), roomService.get(roomId).getParticipants().size());
+
+        // When
+        simultaneously(team, nickname -> roomService.addVote(roomId, nickname, "2"));
+        simultaneously(team, nickname -> roomService.addVote(roomId, nickname, "3"));
+
+        // Then
+        Room voted = roomService.get(roomId);
+        assertEquals(team.size(), voted.getVotes().size());
+        assertTrue(voted.getVotes().stream().allMatch(vote -> vote.getCard().getValue().equals("3")));
+
+        // When
+        simultaneously(team, nickname -> roomService.removeParticipant(roomId, nickname));
+
+        // Then
+        assertTrue(roomService.find(roomId).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Only one of two people joining at once with the same nickname gets it")
+    void simultaneousSameNickname() throws Exception {
+        UUID roomId = roomService.create("test", deck("1")).getId();
+        List<String> nicknames = List.of("Dmitry", "dmitry", " DMITRY ", "Dmitry");
+
+        simultaneously(nicknames, nickname -> {
+            try {
+                roomService.addParticipant(roomId, nickname);
+            }
+            catch(ConstraintException exception) {
+                // Taken by someone faster
+            }
+        });
+
+        assertEquals(1, roomService.get(roomId).getParticipants().size());
+    }
+
+    @Test
+    @DisplayName("Nicknames with dots and dollar signs can join, vote and leave")
+    void nicknamesWithSpecialCharacters() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1", "2"), Set.of(Participant.createParticipant("d.babanin"))).getId();
+
+        // When
+        roomService.addParticipant(roomId, "$money");
+        roomService.addParticipant(roomId, "Dr. Who");
+        roomService.addVote(roomId, "$money", "1");
+        roomService.addVote(roomId, "dr. who", "2");
+        roomService.addVote(roomId, "D.Babanin", "1");
+
+        // Then
+        Room stored = roomService.get(roomId);
+        assertAll(
+                () -> assertEquals(3, stored.getParticipants().size()),
+                () -> assertEquals("1", stored.getVote("$money").getCard().getValue()),
+                () -> assertEquals("2", stored.getVote("Dr. Who").getCard().getValue()),
+                () -> assertEquals("1", stored.getVote("d.babanin").getCard().getValue())
+        );
+
+        // When
+        roomService.removeParticipant(roomId, "$MONEY");
+
+        // Then
+        Room afterLeaving = roomService.get(roomId);
+        assertEquals(2, afterLeaving.getParticipants().size());
+        assertTrue(afterLeaving.findVote("$money").isEmpty());
+        assertEquals(2, afterLeaving.getVotes().size());
+    }
+
+    @Test
+    @DisplayName("Rooms stored with participants and votes in maps are read and changed after the release")
+    void roomsStoredWithMaps() throws Exception {
+        // Given: a room as the previous version stored it
+        UUID roomId = UUID.randomUUID();
+        Document old = new Document("_id", roomId)
+                .append("name", "Sprint 42")
+                .append("deck", new Document("cards", List.of(new Document("value", "1"), new Document("value", "2"))))
+                .append("participantMap", new Document()
+                        .append("dmitry", new Document("nickname", "Dmitry").append("watcher", false))
+                        .append("alex", new Document("nickname", "Alex").append("watcher", true)))
+                .append("voteMap", new Document()
+                        .append("dmitry", new Document("participant", new Document("nickname", "Dmitry").append("watcher", false))
+                                .append("card", new Document("value", "2"))));
+        MongoCollection<Document> rooms = mongoTemplate.getCollection(mongoTemplate.getCollectionName(Room.class));
+        rooms.insertOne(old);
+
+        // When
+        storeRoomsWithArrays.run(new DefaultApplicationArguments());
+        roomService.addParticipant(roomId, "Bob");
+        roomService.addVote(roomId, "Bob", "1");
+
+        // Then
+        Room stored = roomService.get(roomId);
+        assertAll(
+                () -> assertEquals(3, stored.getParticipants().size()),
+                () -> assertTrue(stored.getParticipant("alex").isWatcher()),
+                () -> assertEquals("2", stored.getVote("Dmitry").getCard().getValue()),
+                () -> assertEquals("1", stored.getVote("Bob").getCard().getValue())
+        );
+        Document document = rooms.find(new Document("_id", roomId)).first();
+        assertNotNull(document);
+        assertFalse(document.containsKey("participantMap"));
+        assertFalse(document.containsKey("voteMap"));
+        assertThrows(ConstraintException.class, () -> roomService.addParticipant(roomId, "DMITRY"));
+    }
+
+    private static void simultaneously(List<String> nicknames, Consumer<String> change) throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(nicknames.size());
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<?>> changes = nicknames.stream()
+                    .<Future<?>>map(nickname -> executor.submit(() -> {
+                        start.await();
+                        change.accept(nickname);
+                        return null;
+                    }))
+                    .toList();
+            start.countDown();
+            for(Future<?> future : changes) {
+                future.get();
+            }
+        }
+        finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test

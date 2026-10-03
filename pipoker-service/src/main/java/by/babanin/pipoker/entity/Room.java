@@ -3,11 +3,11 @@ package by.babanin.pipoker.entity;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import org.springframework.data.annotation.Id;
@@ -47,11 +47,13 @@ public class Room {
     @Getter
     private Deck deck;
 
+    // Stored as arrays, not as maps keyed by nickname: each change is one atomic update of these arrays
+    // (see AtomicRoomRepository), and a nickname may contain characters that are not allowed in a field name, like a dot.
     @NotNull
-    private Map<String, @Valid Participant> participantMap = new ConcurrentHashMap<>();
+    private List<@Valid Participant> participants = new CopyOnWriteArrayList<>();
 
     @NotNull
-    private Map<String, Vote> voteMap = new ConcurrentHashMap<>();
+    private List<Vote> votes = new CopyOnWriteArrayList<>();
 
     public Room(String name, Deck deck) {
         this.id = UUID.randomUUID();
@@ -82,7 +84,7 @@ public class Room {
             throw new ConstraintException(String.format("Participant \"%s\" is already exist in the room \"%s\"", participant.getNickname(),
                     id));
         }
-        participantMap.put(participant.normalizeNickname(), participant);
+        participants.add(participant);
         return participant;
     }
 
@@ -91,7 +93,7 @@ public class Room {
     }
 
     public Set<Participant> getParticipants(Comparator<Participant> comparator) {
-        return Collections.unmodifiableSet((Set<? extends Participant>) participantMap.values().stream()
+        return Collections.unmodifiableSet((Set<? extends Participant>) participants.stream()
                 .sorted(comparator)
                 .collect(Collectors.toCollection(LinkedHashSet::new)));
     }
@@ -102,7 +104,10 @@ public class Room {
     }
 
     public Optional<Participant> findParticipant(String nickname) {
-        return Optional.ofNullable(participantMap.get(Participant.normalizeNickname(nickname)));
+        String key = Participant.normalizeNickname(nickname);
+        return participants.stream()
+                .filter(participant -> participant.getKey().equals(key))
+                .findFirst();
     }
 
     public boolean containsParticipant(String nickname) {
@@ -110,17 +115,19 @@ public class Room {
     }
 
     public boolean haveParticipants() {
-        return !participantMap.isEmpty();
+        return !participants.isEmpty();
     }
 
     public Optional<Participant> removeParticipant(String nickname) {
         removeVote(nickname);
-        return Optional.ofNullable(participantMap.remove(Participant.normalizeNickname(nickname)));
+        Optional<Participant> participant = findParticipant(nickname);
+        participant.ifPresent(participants::remove);
+        return participant;
     }
 
     public void clearParticipants() {
         clearVotes();
-        participantMap.clear();
+        participants.clear();
     }
 
     // Votes
@@ -132,7 +139,8 @@ public class Room {
         }
         Card card = getDeck().get(cardValue);
         Vote vote = new Vote(participant, card);
-        voteMap.put(participant.normalizeNickname(), vote);
+        removeVote(nickname);
+        votes.add(vote);
         return vote;
     }
 
@@ -141,7 +149,7 @@ public class Room {
     }
 
     public Set<Vote> getVotes(Comparator<Vote> comparator) {
-        return Collections.unmodifiableSet((Set<? extends Vote>) voteMap.values().stream()
+        return Collections.unmodifiableSet((Set<? extends Vote>) votes.stream()
                 .sorted(comparator)
                 .collect(Collectors.toCollection(LinkedHashSet::new)));
     }
@@ -153,14 +161,19 @@ public class Room {
     }
 
     public Optional<Vote> findVote(String nickname) {
-        return Optional.ofNullable(voteMap.get(Participant.normalizeNickname(nickname)));
+        String key = Participant.normalizeNickname(nickname);
+        return votes.stream()
+                .filter(vote -> vote.getParticipant().getKey().equals(key))
+                .findFirst();
     }
 
     public Optional<Vote> removeVote(String nickname) {
-        return Optional.ofNullable(voteMap.remove(Participant.normalizeNickname(nickname)));
+        Optional<Vote> vote = findVote(nickname);
+        vote.ifPresent(votes::remove);
+        return vote;
     }
 
     public void clearVotes() {
-        voteMap.clear();
+        votes.clear();
     }
 }
