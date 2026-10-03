@@ -11,13 +11,12 @@ import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
 
 import org.modelmapper.ModelMapper;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.scheduling.TaskScheduler;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
@@ -29,7 +28,6 @@ import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.service.RoomService;
-import jakarta.annotation.PreDestroy;
 import lombok.extern.log4j.Log4j2;
 
 /**
@@ -59,35 +57,16 @@ public class RoomPresence {
     private final Map<SeatKey, Seat> seats = new HashMap<>();
     private final Map<String, Set<SeatKey>> sessionSeats = new HashMap<>();
 
-    @Autowired
     public RoomPresence(RoomService roomService, ModelMapper modelMapper, SimpMessageSendingOperations messagingTemplate,
+            @Qualifier("roomPresenceScheduler") TaskScheduler scheduler,
             @Value("${presence.grace-period:10s}") Duration gracePeriod,
             @Value("${presence.startup-grace-period:30s}") Duration startupGracePeriod) {
-        this(roomService, modelMapper, messagingTemplate, createScheduler(), gracePeriod, startupGracePeriod);
-    }
-
-    RoomPresence(RoomService roomService, ModelMapper modelMapper, SimpMessageSendingOperations messagingTemplate,
-            TaskScheduler scheduler, Duration gracePeriod, Duration startupGracePeriod) {
         this.roomService = roomService;
         this.modelMapper = modelMapper;
         this.messagingTemplate = messagingTemplate;
         this.scheduler = scheduler;
         this.gracePeriod = gracePeriod;
         this.startupGracePeriod = startupGracePeriod;
-    }
-
-    private static TaskScheduler createScheduler() {
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setThreadNamePrefix("room-presence-");
-        scheduler.initialize();
-        return scheduler;
-    }
-
-    @PreDestroy
-    void stop() {
-        if(scheduler instanceof ThreadPoolTaskScheduler threadPoolTaskScheduler) {
-            threadPoolTaskScheduler.shutdown();
-        }
     }
 
     /**
