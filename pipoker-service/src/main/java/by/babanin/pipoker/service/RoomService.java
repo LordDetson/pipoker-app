@@ -107,8 +107,8 @@ public class RoomService {
                     room.addParticipant(nickname);
                 }
             });
-            if(allowRemoveRoomIfNotHaveParticipants && room.haveParticipants()) {
-                remove(room.getId());
+            if(allowRemoveRoomIfNotHaveParticipants && !room.haveParticipants()) {
+                roomRepository.delete(room);
             }
             else {
                 roomRepository.save(room);
