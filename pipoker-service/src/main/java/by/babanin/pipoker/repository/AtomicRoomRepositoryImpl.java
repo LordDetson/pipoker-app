@@ -19,6 +19,10 @@ import by.babanin.pipoker.entity.Vote;
 
 class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
 
+    // Names of the stored fields of a room
+    private static final String PARTICIPANTS = "participants";
+    private static final String VOTES = "votes";
+    private static final String VOTES_SHOWN = "votesShown";
     private static final String PARTICIPANT_KEY = "key";
     private static final String VOTE_KEY = "participant.key";
 
@@ -32,17 +36,17 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     public boolean addParticipant(UUID roomId, Participant participant) {
         // The condition on the nickname and the push are one update, so two people can't take the same nickname
         Query room = query(where("id").is(roomId)
-                .and(Room.PARTICIPANTS + "." + PARTICIPANT_KEY).ne(participant.getKey()));
-        Update update = new Update().push(Room.PARTICIPANTS, toDocument(participant));
+                .and(PARTICIPANTS + "." + PARTICIPANT_KEY).ne(participant.getKey()));
+        Update update = new Update().push(PARTICIPANTS, toDocument(participant));
         return mongoTemplate.updateFirst(room, update, Room.class).getModifiedCount() == 1;
     }
 
     @Override
     public Optional<Participant> removeParticipant(UUID roomId, String key) {
-        Query room = query(where("id").is(roomId).and(Room.PARTICIPANTS + "." + PARTICIPANT_KEY).is(key));
+        Query room = query(where("id").is(roomId).and(PARTICIPANTS + "." + PARTICIPANT_KEY).is(key));
         Update update = new Update()
-                .pull(Room.PARTICIPANTS, new Document(PARTICIPANT_KEY, key))
-                .pull(Room.VOTES, new Document(VOTE_KEY, key));
+                .pull(PARTICIPANTS, new Document(PARTICIPANT_KEY, key))
+                .pull(VOTES, new Document(VOTE_KEY, key));
         // Returns the room as it was before the update, which still has the participant
         return Optional.ofNullable(mongoTemplate.findAndModify(room, update, Room.class))
                 .flatMap(before -> before.findParticipant(key));
@@ -50,7 +54,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
 
     @Override
     public boolean removeIfEmpty(UUID roomId) {
-        Query emptyRoom = query(where("id").is(roomId).and(Room.PARTICIPANTS).size(0));
+        Query emptyRoom = query(where("id").is(roomId).and(PARTICIPANTS).size(0));
         return mongoTemplate.remove(emptyRoom, Room.class).getDeletedCount() == 1;
     }
 
@@ -58,34 +62,34 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     public boolean addVote(UUID roomId, Vote vote) {
         String key = vote.getParticipant().getKey();
         // The participant must still be a voter in the room at the moment of the update
-        Query room = query(where("id").is(roomId).and(Room.PARTICIPANTS)
+        Query room = query(where("id").is(roomId).and(PARTICIPANTS)
                 .elemMatch(where(PARTICIPANT_KEY).is(key).and("watcher").is(false)));
         // One update replaces the previous vote: keep the other votes and add the new one.
         // $literal keeps values like a nickname starting with $ from being read as field paths.
-        Document otherVotes = new Document("$filter", new Document("input", new Document("$ifNull", List.of("$" + Room.VOTES, List.of())))
+        Document otherVotes = new Document("$filter", new Document("input", new Document("$ifNull", List.of("$" + VOTES, List.of())))
                 .append("cond", new Document("$ne", List.of("$$this." + VOTE_KEY, new Document("$literal", key)))));
         Document votes = new Document("$concatArrays", List.of(otherVotes, new Document("$literal", List.of(toDocument(vote)))));
-        AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", new Document(Room.VOTES, votes))));
+        AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", new Document(VOTES, votes))));
         return mongoTemplate.updateFirst(room, update, Room.class).getMatchedCount() == 1;
     }
 
     @Override
     public Optional<Vote> removeVote(UUID roomId, String key) {
-        Query room = query(where("id").is(roomId).and(Room.VOTES + "." + VOTE_KEY).is(key));
-        Update update = new Update().pull(Room.VOTES, new Document(VOTE_KEY, key));
+        Query room = query(where("id").is(roomId).and(VOTES + "." + VOTE_KEY).is(key));
+        Update update = new Update().pull(VOTES, new Document(VOTE_KEY, key));
         return Optional.ofNullable(mongoTemplate.findAndModify(room, update, Room.class))
                 .flatMap(before -> before.findVote(key));
     }
 
     @Override
     public boolean showVotes(UUID roomId) {
-        Update update = new Update().set(Room.VOTES_SHOWN, true);
+        Update update = new Update().set(VOTES_SHOWN, true);
         return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 
     @Override
     public boolean clearVotes(UUID roomId) {
-        Update update = new Update().set(Room.VOTES, List.of()).set(Room.VOTES_SHOWN, false);
+        Update update = new Update().set(VOTES, List.of()).set(VOTES_SHOWN, false);
         return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 

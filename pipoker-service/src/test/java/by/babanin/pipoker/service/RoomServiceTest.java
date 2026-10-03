@@ -580,8 +580,8 @@ public class RoomServiceTest {
     @DisplayName("Revealing the cards of a missing room fails")
     void showVotesOfMissingRoom() {
         UUID roomId = UUID.randomUUID();
-        Mockito.when(roomRepository.findById(roomId))
-                .thenReturn(Optional.empty());
+        Mockito.when(roomRepository.showVotes(roomId))
+                .thenReturn(false);
 
         assertThrows(RoomServiceException.class, () -> roomService.showVotes(roomId));
     }
@@ -590,7 +590,7 @@ public class RoomServiceTest {
     @DisplayName("Clearing votes of a missing room fails")
     void clearVotesOfMissingRoom() {
         UUID roomId = UUID.randomUUID();
-        Mockito.when(roomRepository.existsById(roomId))
+        Mockito.when(roomRepository.clearVotes(roomId))
                 .thenReturn(false);
 
         assertThrows(RoomServiceException.class, () -> roomService.clearVotes(roomId));
