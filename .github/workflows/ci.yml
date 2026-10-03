@@ -33,7 +33,8 @@ jobs:
           retention-days: 7
 
   image:
-    # Images are published only from main, pull requests are just built and tested
+    # Images are published only from main, pull requests are just built and tested.
+    # The qa tag is picked up by the QA environment on the server (see pipoker-docker-config/server).
     if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
@@ -65,3 +66,4 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:main
+            ${{ env.IMAGE_NAME }}:qa

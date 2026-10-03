@@ -1,0 +1,40 @@
+name: Promote to PROD
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Commit SHA that was checked on QA
+        type: string
+        required: true
+
+env:
+  IMAGE_NAME: ghcr.io/lorddetson/pipoker-controller
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    # Approval is configured in the "prod" environment settings (required reviewers)
+    environment: prod
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check the tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: '[[ "$TAG" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid tag: $TAG"; exit 1; }'
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The PROD environment on the server picks up the prod tag within a few minutes
+      - name: Tag the image as prod
+        env:
+          TAG: ${{ inputs.tag }}
+        run: docker buildx imagetools create --tag "$IMAGE_NAME:prod" "$IMAGE_NAME:$TAG"
