@@ -1,6 +1,7 @@
 package by.babanin.pipoker.service;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -65,6 +66,10 @@ public class RoomService {
 
     public Optional<Room> find(UUID id) {
         return roomRepository.findById(id);
+    }
+
+    public List<Room> getAll() {
+        return roomRepository.findAll();
     }
 
     public Optional<Room> remove(UUID id) {

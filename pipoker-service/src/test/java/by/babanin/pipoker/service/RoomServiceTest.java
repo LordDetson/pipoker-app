@@ -2,6 +2,7 @@ package by.babanin.pipoker.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -180,6 +181,23 @@ public class RoomServiceTest {
 
         // Then
         assertFalse(found.isPresent());
+    }
+
+    @Test
+    @DisplayName("Get all rooms")
+    void getAllRooms() {
+        // Given
+        Deck deck = new Deck();
+        deck.add("1h");
+        List<Room> rooms = List.of(new Room("first", deck), new Room("second", deck));
+        Mockito.when(roomRepository.findAll())
+                .thenReturn(rooms);
+
+        // When
+        List<Room> found = roomService.getAll();
+
+        // Then
+        assertEquals(rooms, found);
     }
 
     @Test

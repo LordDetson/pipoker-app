@@ -12,6 +12,7 @@ public class PiPokerApplication {
     public static final String USER_DESTINATION_PREFIX = "/user";
     public static final String TOPIC_ROOM_CREATED_DESTINATION = TOPIC_ROOM_DESTINATION_PREFIX + ".created";
     public static final String TOPIC_ROOM_ERRORS_DESTINATION = TOPIC_ROOM_DESTINATION_PREFIX + ".errors";
+    public static final String TOPIC_ROOM_RETURNED_DESTINATION = TOPIC_ROOM_DESTINATION_PREFIX + ".returned";
 
     public static void main(String[] args) {
         SpringApplication.run(PiPokerApplication.class, args);

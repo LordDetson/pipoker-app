@@ -116,11 +116,13 @@
                                 <ignoredUsedUndeclaredDependency>com.fasterxml.jackson.core:jackson-annotations</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>jakarta.validation:jakarta.validation-api</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>jakarta.annotation:jakarta.annotation-api</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUsedUndeclaredDependency>
                             </ignoredUsedUndeclaredDependencies>
                             <ignoredNonTestScopedDependencies>
                                 <ignoredNonTestScopedDependency>org.springframework*</ignoredNonTestScopedDependency>
                                 <ignoredNonTestScopedDependency>jakarta.annotation:jakarta.annotation-api</ignoredNonTestScopedDependency>
                                 <ignoredNonTestScopedDependency>com.fasterxml.jackson.core:jackson-databind</ignoredNonTestScopedDependency>
+                                <ignoredNonTestScopedDependency>org.apache.logging.log4j:log4j-api</ignoredNonTestScopedDependency>
                             </ignoredNonTestScopedDependencies>
                         </configuration>
                     </execution>

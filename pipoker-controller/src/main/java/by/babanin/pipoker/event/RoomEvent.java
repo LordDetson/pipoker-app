@@ -26,6 +26,7 @@ public class RoomEvent {
     public enum EventType {
         PARTICIPANT_ADDED,
         PARTICIPANT_REMOVED,
+        PARTICIPANT_RETURNED,
         VOTE_ADDED,
         VOTE_REMOVED,
         CLEAR_VOTES,
