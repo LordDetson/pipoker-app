@@ -562,7 +562,7 @@ public class RoomServiceTest {
     @DisplayName("Clearing votes of a missing room fails")
     void clearVotesOfMissingRoom() {
         UUID roomId = UUID.randomUUID();
-        Mockito.when(roomRepository.existsById(roomId))
+        Mockito.when(roomRepository.clearVotes(roomId))
                 .thenReturn(false);
 
         assertThrows(RoomServiceException.class, () -> roomService.clearVotes(roomId));

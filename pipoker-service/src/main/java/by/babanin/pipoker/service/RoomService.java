@@ -136,8 +136,9 @@ public class RoomService {
     }
 
     public void clearVotes(UUID roomId) {
+        // The update finds the room by its id alone, so finding nothing means the room is missing
         if(!roomRepository.clearVotes(roomId)) {
-            checkExists(roomId);
+            throw notFound(roomId);
         }
     }
 

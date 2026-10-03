@@ -29,10 +29,6 @@ import lombok.ToString;
 @Document("room")
 public class Room {
 
-    // Names of the stored fields, used by the atomic updates in AtomicRoomRepositoryImpl
-    public static final String PARTICIPANTS = "participants";
-    public static final String VOTES = "votes";
-
     @EqualsAndHashCode.Include
     @ToString.Include
     @Getter
