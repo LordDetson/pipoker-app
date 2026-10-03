@@ -32,8 +32,10 @@ import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Vote;
+import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
+import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
@@ -94,7 +96,7 @@ class RoomControllerTest {
                 .thenReturn(room);
 
         // When
-        Queue<RoomDto> results = buildSession(RoomDto.class, 1, TimeUnit.SECONDS).send(
+        Queue<RoomDto> results = buildUserSession(RoomDto.class, PiPokerApplication.TOPIC_ROOM_CREATED_DESTINATION).send(
                 TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + "/create",
                 RoomCreationDto.builder()
                         .name(name)
@@ -126,7 +128,7 @@ class RoomControllerTest {
                 .deck(expectedResult.getDeck())
                 .build();
         roomCreationDto.getParticipants().addAll(expectedResult.getParticipants());
-        Queue<RoomDto> results = buildSession(RoomDto.class, 1, TimeUnit.SECONDS).send(
+        Queue<RoomDto> results = buildUserSession(RoomDto.class, PiPokerApplication.TOPIC_ROOM_CREATED_DESTINATION).send(
                 TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + "/create",
                 roomCreationDto);
 
@@ -147,13 +149,13 @@ class RoomControllerTest {
 
         // When
         String destination = String.format("/%s/participants/add", roomId);
-        Queue<ParticipantDto> results = buildSession(ParticipantDto.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
+        Queue<RoomEvent> results = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
                 .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
                 expectedResult);
 
         // Then
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(expectedResult, results.poll()));
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, expectedResult), results.poll()));
     }
 
     @Test
@@ -168,13 +170,13 @@ class RoomControllerTest {
 
         // When
         String destination = String.format("/%s/participants/remove", roomId);
-        Queue<ParticipantDto> results = buildSession(ParticipantDto.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
+        Queue<RoomEvent> results = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
                 .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
                         participant.getNickname());
 
         // Then
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(expectedResult, results.poll()));
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, expectedResult), results.poll()));
     }
 
     @Test
@@ -191,13 +193,13 @@ class RoomControllerTest {
 
         // When
         String destination = String.format("/%s/votes/add", roomId);
-        Queue<VoteDto> results = buildSession(VoteDto.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
+        Queue<RoomEvent> results = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
                 .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
                         expectedResult);
 
         // Then
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(expectedResult, results.poll()));
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.VOTE_ADDED, expectedResult), results.poll()));
     }
 
     @Test
@@ -214,13 +216,13 @@ class RoomControllerTest {
 
         // When
         String destination = String.format("/%s/votes/remove", roomId);
-        Queue<VoteDto> results = buildSession(VoteDto.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
+        Queue<RoomEvent> results = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
                 .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
                         participant.getNickname());
 
         // Then
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(expectedResult, results.poll()));
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.VOTE_REMOVED, expectedResult), results.poll()));
     }
 
     @Test
@@ -238,6 +240,82 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.CLEAR_VOTES), results.poll()));
         Mockito.verify(roomService, times(1)).clearVotes(roomId);
+    }
+
+    @Test
+    void get() throws Exception {
+        // Given
+        Deck deck = new Deck();
+        deck.add("1d");
+        Room room = new Room("test", deck);
+        room.addParticipant("Dmitry");
+        room.addVote("Dmitry", "1d");
+        UUID roomId = UUID.randomUUID();
+        RoomDto expectedResult = modelMapper.map(room, RoomDto.class);
+
+        when(roomService.get(roomId))
+                .thenReturn(room);
+
+        // When
+        Queue<RoomDto> results = TestStompSession.<RoomDto>builder()
+                .stompClient(webSocketStompClient)
+                .brokerUrl(String.format(TestWebSocketConfig.URL_FORMAT, port))
+                .destination(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + "/" + roomId)
+                .resultType(RoomDto.class)
+                .build()
+                .getResults();
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(expectedResult, results.poll()));
+    }
+
+    @Test
+    void showVotes() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+
+        // When
+        String destination = String.format("/%s/votes/show", roomId);
+        Queue<RoomEvent> results = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
+                .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
+                        roomId);
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES), results.poll()));
+        Mockito.verify(roomService, times(1)).get(roomId);
+    }
+
+    @Test
+    void sendErrorToUser() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Participant participant = Participant.createParticipant("Dmitry");
+        String errorMessage = "Participant \"Dmitry\" is already exist";
+
+        Mockito.when(roomService.addParticipant(roomId, participant.getNickname()))
+                .thenThrow(new RoomServiceException(errorMessage));
+
+        // When
+        String destination = TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX
+                + String.format("/%s/participants/add", roomId);
+        Queue<ErrorEvent> results = buildUserSession(ErrorEvent.class, PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION)
+                .send(destination, modelMapper.map(participant, ParticipantDto.class));
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, errorMessage), results.poll()));
+    }
+
+    private <T> TestStompSession<T> buildUserSession(Class<T> resultType, String destination)
+            throws ExecutionException, InterruptedException, TimeoutException {
+        return TestStompSession.<T>builder()
+                .stompClient(webSocketStompClient)
+                .brokerUrl(String.format(TestWebSocketConfig.URL_FORMAT, port))
+                .destination(PiPokerApplication.USER_DESTINATION_PREFIX + destination)
+                .resultType(resultType)
+                .build();
     }
 
     private <T> TestStompSession<T> buildSession(Class<T> resultType, long timeout, TimeUnit unit) throws ExecutionException, InterruptedException, TimeoutException {
