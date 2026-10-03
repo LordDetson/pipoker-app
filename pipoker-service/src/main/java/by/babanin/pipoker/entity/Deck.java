@@ -8,6 +8,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 
 import by.babanin.pipoker.exception.ConstraintException;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import lombok.EqualsAndHashCode;
@@ -17,7 +18,7 @@ public class Deck {
 
     @NotEmpty
     @Size(min = 1, max = 20)
-    private List<Card> cards = new CopyOnWriteArrayList<>();
+    private List<@Valid Card> cards = new CopyOnWriteArrayList<>();
 
     public List<Card> get() {
         return Collections.unmodifiableList(cards);
