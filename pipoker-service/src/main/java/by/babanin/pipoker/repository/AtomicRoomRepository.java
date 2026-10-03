@@ -11,7 +11,7 @@ import by.babanin.pipoker.entity.Vote;
  * Several people act in a room at the same time, so a change never reads the room and saves it back whole:
  * that would overwrite whatever someone else changed in between.
  */
-public interface RoomChanges {
+public interface AtomicRoomRepository {
 
     /**
      * @return false when the room is missing or already has a participant with this nickname

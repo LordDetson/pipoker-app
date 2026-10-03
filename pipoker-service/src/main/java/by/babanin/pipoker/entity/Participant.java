@@ -27,7 +27,9 @@ public final class Participant implements Comparable<Participant> {
 
     private boolean watcher;
 
-    // The nickname as it is compared: rooms are searched and changed by it in MongoDB
+    // The nickname as it is compared. Nicknames are unique regardless of case and surrounding spaces ("Dmitry" and
+    // " dmitry" are the same person), but MongoDB compares strings exactly, so rooms are searched by this form
+    // in the atomic updates. The old participant map was keyed by it too.
     @Setter(AccessLevel.NONE)
     private String key;
 

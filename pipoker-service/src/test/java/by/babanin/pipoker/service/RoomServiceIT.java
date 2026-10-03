@@ -29,6 +29,8 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.mongodb.client.MongoCollection;
+
 import by.babanin.pipoker.MongoDbContainer;
 import by.babanin.pipoker.ServiceTestApplication;
 import by.babanin.pipoker.entity.Card;
@@ -298,7 +300,8 @@ class RoomServiceIT {
                 .append("voteMap", new Document()
                         .append("dmitry", new Document("participant", new Document("nickname", "Dmitry").append("watcher", false))
                                 .append("card", new Document("value", "2"))));
-        mongoTemplate.getCollection(Room.COLLECTION).insertOne(old);
+        MongoCollection<Document> rooms = mongoTemplate.getCollection(mongoTemplate.getCollectionName(Room.class));
+        rooms.insertOne(old);
 
         // When
         storeRoomsWithArrays.run(new DefaultApplicationArguments());
@@ -313,7 +316,7 @@ class RoomServiceIT {
                 () -> assertEquals("2", stored.getVote("Dmitry").getCard().getValue()),
                 () -> assertEquals("1", stored.getVote("Bob").getCard().getValue())
         );
-        Document document = mongoTemplate.getCollection(Room.COLLECTION).find(new Document("_id", roomId)).first();
+        Document document = rooms.find(new Document("_id", roomId)).first();
         assertNotNull(document);
         assertFalse(document.containsKey("participantMap"));
         assertFalse(document.containsKey("voteMap"));
