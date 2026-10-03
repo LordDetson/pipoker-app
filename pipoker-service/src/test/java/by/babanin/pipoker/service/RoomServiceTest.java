@@ -339,4 +339,55 @@ public class RoomServiceTest {
                 () -> assertFalse(participant.isWatcher())
         );
     }
+
+    @Test
+    @DisplayName("Room is kept when a participant leaves and others remain")
+    void removeParticipantKeepsRoomWithRemainingParticipants() {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Deck deck = new Deck();
+        deck.add("1h");
+        Room room = new Room("test", deck);
+        room.addParticipant("first");
+        room.addParticipant("second");
+
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.of(room));
+
+        // When
+        Optional<Participant> removed = roomService.removeParticipant(roomId, "first");
+
+        // Then
+        assertTrue(removed.isPresent());
+        assertTrue(room.haveParticipants());
+        Mockito.verify(roomRepository, Mockito.times(1))
+                .save(room);
+        Mockito.verify(roomRepository, Mockito.never())
+                .delete(Mockito.any());
+    }
+
+    @Test
+    @DisplayName("Room is removed when the last participant leaves")
+    void removeLastParticipantRemovesRoom() {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Deck deck = new Deck();
+        deck.add("1h");
+        Room room = new Room("test", deck);
+        room.addParticipant("last");
+
+        Mockito.when(roomRepository.findById(roomId))
+                .thenReturn(Optional.of(room));
+
+        // When
+        Optional<Participant> removed = roomService.removeParticipant(roomId, "last");
+
+        // Then
+        assertTrue(removed.isPresent());
+        assertFalse(room.haveParticipants());
+        Mockito.verify(roomRepository, Mockito.times(1))
+                .delete(room);
+        Mockito.verify(roomRepository, Mockito.never())
+                .save(Mockito.any());
+    }
 }
