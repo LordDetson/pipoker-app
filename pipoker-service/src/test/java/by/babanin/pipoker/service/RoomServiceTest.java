@@ -34,6 +34,7 @@ import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.InvalidDataException;
 import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.exception.VoteServiceException;
@@ -719,9 +720,9 @@ public class RoomServiceTest {
 
         assertDoesNotThrow(() -> roomService.startTimer(roomId, Duration.ofSeconds(10)));
         assertDoesNotThrow(() -> roomService.startTimer(roomId, Duration.ofMinutes(30)));
-        assertThrows(RoomServiceException.class, () -> roomService.startTimer(roomId, Duration.ofSeconds(9)));
-        assertThrows(RoomServiceException.class, () -> roomService.startTimer(roomId, Duration.ofMinutes(30).plusSeconds(1)));
-        assertThrows(RoomServiceException.class, () -> roomService.startTimer(roomId, Duration.ofSeconds(-60)));
+        assertThrows(InvalidDataException.class, () -> roomService.startTimer(roomId, Duration.ofSeconds(9)));
+        assertThrows(InvalidDataException.class, () -> roomService.startTimer(roomId, Duration.ofMinutes(30).plusSeconds(1)));
+        assertThrows(InvalidDataException.class, () -> roomService.startTimer(roomId, Duration.ofSeconds(-60)));
         Mockito.verify(roomRepository, Mockito.times(2)).startTimer(ArgumentMatchers.eq(roomId), ArgumentMatchers.any());
     }
 

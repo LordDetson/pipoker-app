@@ -238,7 +238,7 @@ public class RoomService {
      */
     public Timer startTimer(UUID roomId, Duration duration) {
         if(duration.compareTo(Timer.MIN_DURATION) < 0 || duration.compareTo(Timer.MAX_DURATION) > 0) {
-            throw new RoomServiceException(String.format("The timer can run from %d seconds to %d minutes",
+            throw new InvalidDataException(String.format("The timer can run from %d seconds to %d minutes",
                     Timer.MIN_DURATION.toSeconds(), Timer.MAX_DURATION.toMinutes()));
         }
         Timer timer = Timer.start(duration);

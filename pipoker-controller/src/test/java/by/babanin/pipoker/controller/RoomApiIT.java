@@ -304,7 +304,8 @@ class RoomApiIT {
         // Timer too long
         String timer = "/app/room/" + roomId + "/timer/start";
         dmitry.send(timer, new TimerDto(3600, null));
-        assertEquals(new ErrorEvent(timer, "The timer can run from 10 seconds to 30 minutes", null), next(dmitryErrors));
+        assertEquals(new ErrorEvent(timer, "The timer can run from 10 seconds to 30 minutes", ErrorCode.INVALID_DATA),
+                next(dmitryErrors));
 
         // Nobody else saw those errors and no room event was sent for them
         assertNoMessage(events);
