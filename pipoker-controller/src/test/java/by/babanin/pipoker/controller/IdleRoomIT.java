@@ -28,6 +28,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import by.babanin.pipoker.IntegrationTestContainers;
 import by.babanin.pipoker.event.ErrorEvent;
+import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.model.DeckDto;
@@ -105,7 +106,7 @@ class IdleRoomIT {
         alex.send(destination, new ParticipantDto("Bob", false));
 
         // Then
-        assertEquals(ErrorEvent.Code.ROOM_NOT_FOUND, next(errors).getCode());
+        assertEquals(ErrorCode.ROOM_NOT_FOUND, next(errors).getCode());
     }
 
     @Test

@@ -15,6 +15,7 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.VoteServiceException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -97,11 +98,11 @@ public class Room {
 
     private Participant addParticipant(Participant participant) {
         if(participant.normalizeNickname() == null) {
-            throw new ConstraintException("Nickname can't be blank");
+            throw new ConstraintException(ErrorCode.INVALID_DATA, "Nickname can't be blank");
         }
         if(containsParticipant(participant.getNickname())) {
-            throw new ConstraintException(String.format("Participant \"%s\" is already exist in the room \"%s\"", participant.getNickname(),
-                    id));
+            throw new ConstraintException(ErrorCode.NICKNAME_TAKEN,
+                    String.format("Participant \"%s\" is already exist in the room \"%s\"", participant.getNickname(), id));
         }
         participants.add(participant);
         return participant;
@@ -119,7 +120,8 @@ public class Room {
 
     public Participant getParticipant(String nickname) {
         return findParticipant(nickname)
-                .orElseThrow(() -> new ConstraintException(String.format("Participant \"%s\" is not found in the room \"%s\"", nickname, id)));
+                .orElseThrow(() -> new ConstraintException(ErrorCode.PARTICIPANT_NOT_FOUND,
+                        String.format("Participant \"%s\" is not found in the room \"%s\"", nickname, id)));
     }
 
     public Optional<Participant> findParticipant(String nickname) {
@@ -154,7 +156,8 @@ public class Room {
     public Vote addVote(String nickname, String cardValue) {
         Participant participant = getParticipant(nickname);
         if(participant.isWatcher()) {
-            throw new VoteServiceException(String.format("The participant \"%s\" is a watcher, so can't vote", nickname));
+            throw new VoteServiceException(ErrorCode.WATCHER_CANNOT_VOTE,
+                    String.format("The participant \"%s\" is a watcher, so can't vote", nickname));
         }
         Card card = getDeck().get(cardValue);
         Vote vote = new Vote(participant, card);
@@ -175,7 +178,8 @@ public class Room {
 
     public Vote getVote(String nickname) {
         return findVote(nickname)
-                .orElseThrow(() -> new VoteServiceException(String.format("Vote is not found for the room \"%s\" and the participant \"%s\"",
+                .orElseThrow(() -> new VoteServiceException(ErrorCode.UNEXPECTED,
+                        String.format("Vote is not found for the room \"%s\" and the participant \"%s\"",
                         id, nickname)));
     }
 

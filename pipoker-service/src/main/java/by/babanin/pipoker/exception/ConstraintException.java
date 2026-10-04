@@ -1,8 +1,8 @@
 package by.babanin.pipoker.exception;
 
-import lombok.experimental.StandardException;
+public class ConstraintException extends PiPokerException {
 
-@StandardException
-public class ConstraintException extends RuntimeException {
-
+    public ConstraintException(ErrorCode code, String message) {
+        super(code, message);
+    }
 }

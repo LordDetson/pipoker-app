@@ -8,6 +8,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.ErrorCode;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
@@ -54,7 +55,8 @@ public class Deck {
 
     public Card get(String cardValue) {
         return find(cardValue)
-                .orElseThrow(() -> new ConstraintException(String.format("Card with the value \"%s\" is not found in the deck", cardValue)));
+                .orElseThrow(() -> new ConstraintException(ErrorCode.CARD_NOT_IN_DECK,
+                        String.format("Card with the value \"%s\" is not found in the deck", cardValue)));
     }
 
     public Optional<Card> find(String cardValue) {
@@ -85,7 +87,7 @@ public class Deck {
 
     private boolean doIfNotContains(Card card, Runnable runnable) {
         if(card == null) {
-            throw new ConstraintException("The card should not be null");
+            throw new ConstraintException(ErrorCode.INVALID_DATA, "The card should not be null");
         }
         if(!contains(card)) {
             runnable.run();
@@ -96,7 +98,7 @@ public class Deck {
 
     private boolean doIfNotContains(Card card, Supplier<Boolean> runnable) {
         if(card == null) {
-            throw new ConstraintException("The card should not be null");
+            throw new ConstraintException(ErrorCode.INVALID_DATA, "The card should not be null");
         }
         return !contains(card) && runnable.get();
     }

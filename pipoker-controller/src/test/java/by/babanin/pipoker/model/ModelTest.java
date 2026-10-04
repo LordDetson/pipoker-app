@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.json.JsonMapper;
 
 import by.babanin.pipoker.event.ErrorEvent;
+import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 
@@ -124,16 +125,8 @@ class ModelTest {
     @Test
     @DisplayName("Error event JSON")
     void writeErrorEvent() throws Exception {
-        String json = jsonMapper.writeValueAsString(new ErrorEvent("/app/room/create", "Deck can't be null", null));
-
-        assertEquals("{\"destination\":\"/app/room/create\",\"message\":\"Deck can't be null\"}", json);
-    }
-
-    @Test
-    @DisplayName("Error event JSON of a missing room")
-    void writeRoomNotFoundErrorEvent() throws Exception {
         String json = jsonMapper.writeValueAsString(new ErrorEvent("/app/room/1", "Room \"1\" is not found",
-                ErrorEvent.Code.ROOM_NOT_FOUND));
+                ErrorCode.ROOM_NOT_FOUND));
 
         assertEquals("{\"destination\":\"/app/room/1\",\"message\":\"Room \\\"1\\\" is not found\",\"code\":\"ROOM_NOT_FOUND\"}", json);
     }

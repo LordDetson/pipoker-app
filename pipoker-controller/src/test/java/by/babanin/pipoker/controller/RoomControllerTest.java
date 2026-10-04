@@ -46,8 +46,9 @@ import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
+import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.RoomNotFoundException;
-import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
@@ -402,17 +403,16 @@ class RoomControllerTest {
         String errorMessage = "Participant \"Dmitry\" is already exist";
 
         Mockito.when(roomService.addParticipant(roomId, participant.getNickname()))
-                .thenThrow(new RoomServiceException(errorMessage));
+                .thenThrow(new ConstraintException(ErrorCode.NICKNAME_TAKEN, errorMessage));
 
         // When
-        String destination = TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX
-                + String.format("/%s/participants/add", roomId);
+        String destination = appDestination(String.format("/%s/participants/add", roomId));
         Queue<ErrorEvent> results = buildUserSession(ErrorEvent.class, PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION)
                 .send(destination, modelMapper.map(participant, ParticipantDto.class));
 
         // Then
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, errorMessage, null), results.poll()));
+                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, errorMessage, ErrorCode.NICKNAME_TAKEN), results.poll()));
     }
 
     @Test
@@ -424,15 +424,72 @@ class RoomControllerTest {
                 .thenThrow(new RoomNotFoundException(errorMessage));
 
         // When
-        String destination = TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX
-                + String.format("/%s/participants/add", roomId);
+        String destination = appDestination(String.format("/%s/participants/add", roomId));
         Queue<ErrorEvent> results = buildUserSession(ErrorEvent.class, PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION)
                 .send(destination, new ParticipantDto("Dmitry", false));
 
         // Then
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, errorMessage, ErrorEvent.Code.ROOM_NOT_FOUND),
+                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, errorMessage, ErrorCode.ROOM_NOT_FOUND),
                         results.poll()));
+    }
+
+    @Test
+    void sendInvalidMessageAsInvalidData() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+
+        // When
+        String destination = appDestination(String.format("/%s/participants/add", roomId));
+        Queue<ErrorEvent> results = buildUserSession(ErrorEvent.class, PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION)
+                .send(destination, new ParticipantDto("D", false));
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(ErrorCode.INVALID_DATA, codeOf(results.poll())));
+        Mockito.verifyNoInteractions(roomService);
+    }
+
+    @Test
+    void sendInvalidParameterAsInvalidData() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+
+        // When
+        String destination = appDestination(String.format("/%s/votes/remove", roomId));
+        Queue<ErrorEvent> results = buildUserSession(ErrorEvent.class, PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION)
+                .send(destination, " ");
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(ErrorCode.INVALID_DATA, codeOf(results.poll())));
+        Mockito.verifyNoInteractions(roomService);
+    }
+
+    @Test
+    void sendUnexpectedFailureToUser() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomService.addParticipant(roomId, "Dmitry"))
+                .thenThrow(new IllegalStateException("Connection to MongoDB is lost"));
+
+        // When
+        String destination = appDestination(String.format("/%s/participants/add", roomId));
+        Queue<ErrorEvent> results = buildUserSession(ErrorEvent.class, PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION)
+                .send(destination, new ParticipantDto("Dmitry", false));
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, "Connection to MongoDB is lost", ErrorCode.UNEXPECTED),
+                        results.poll()));
+    }
+
+    private static String appDestination(String roomDestination) {
+        return TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + roomDestination;
+    }
+
+    private static ErrorCode codeOf(ErrorEvent error) {
+        return error != null ? error.getCode() : null;
     }
 
     private <T> TestStompSession<T> buildUserSession(Class<T> resultType, String destination)
