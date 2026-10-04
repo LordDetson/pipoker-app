@@ -230,9 +230,11 @@ class RoomApiIT {
         // Given
         UUID roomId = createRoom(dmitry, "test", List.of("1"), new ParticipantDto("Dmitry", false)).getId();
         String room = "/app/room/" + roomId;
-        alex.send(room + "/participants/add", new ParticipantDto("Alex", true));
         BlockingQueue<RoomEvent> dmitryEvents = dmitry.subscribe("/topic/room." + roomId, RoomEvent.class);
         BlockingQueue<RoomEvent> alexEvents = alex.subscribe("/topic/room." + roomId, RoomEvent.class);
+        alex.send(room + "/participants/add", new ParticipantDto("Alex", true));
+        next(dmitryEvents);
+        next(alexEvents);
 
         // A watcher starts it too, and every page gets the time left
         alex.send(room + "/timer/start", new TimerDto(120, null));
