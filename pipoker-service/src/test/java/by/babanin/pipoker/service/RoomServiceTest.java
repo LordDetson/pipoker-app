@@ -2,6 +2,7 @@ package by.babanin.pipoker.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -30,8 +31,10 @@ import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.InvalidDataException;
 import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.exception.VoteServiceException;
@@ -686,6 +689,54 @@ public class RoomServiceTest {
                 .thenReturn(false);
 
         assertThrows(RoomServiceException.class, () -> roomService.clearVotes(roomId));
+    }
+
+    // Timer
+
+    @Test
+    @DisplayName("Starting the timer")
+    void startTimer() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.startTimer(ArgumentMatchers.eq(roomId), ArgumentMatchers.any(Timer.class)))
+                .thenReturn(true);
+        Instant before = Instant.now();
+
+        Timer timer = roomService.startTimer(roomId, Duration.ofMinutes(2));
+
+        assertAll(
+                () -> assertEquals(120, timer.getSeconds()),
+                () -> assertFalse(timer.getEndsAt().isBefore(before.plus(Duration.ofMinutes(2)))),
+                () -> assertFalse(timer.getEndsAt().isAfter(Instant.now().plus(Duration.ofMinutes(2))))
+        );
+        Mockito.verify(roomRepository).startTimer(roomId, timer);
+    }
+
+    @Test
+    @DisplayName("The timer runs from 10 seconds to 30 minutes")
+    void timerDuration() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.startTimer(ArgumentMatchers.eq(roomId), ArgumentMatchers.any(Timer.class)))
+                .thenReturn(true);
+
+        assertDoesNotThrow(() -> roomService.startTimer(roomId, Duration.ofSeconds(10)));
+        assertDoesNotThrow(() -> roomService.startTimer(roomId, Duration.ofMinutes(30)));
+        assertThrows(InvalidDataException.class, () -> roomService.startTimer(roomId, Duration.ofSeconds(9)));
+        assertThrows(InvalidDataException.class, () -> roomService.startTimer(roomId, Duration.ofMinutes(30).plusSeconds(1)));
+        assertThrows(InvalidDataException.class, () -> roomService.startTimer(roomId, Duration.ofSeconds(-60)));
+        Mockito.verify(roomRepository, Mockito.times(2)).startTimer(ArgumentMatchers.eq(roomId), ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Starting or stopping the timer of a missing room fails")
+    void timerOfMissingRoom() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.startTimer(ArgumentMatchers.eq(roomId), ArgumentMatchers.any(Timer.class)))
+                .thenReturn(false);
+        Mockito.when(roomRepository.stopTimer(roomId))
+                .thenReturn(false);
+
+        assertThrows(RoomNotFoundException.class, () -> roomService.startTimer(roomId, Duration.ofMinutes(1)));
+        assertThrows(RoomNotFoundException.class, () -> roomService.stopTimer(roomId));
     }
 
     // Rooms with participants

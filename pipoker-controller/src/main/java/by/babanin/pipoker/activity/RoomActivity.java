@@ -28,6 +28,7 @@ public class RoomActivity {
     private final Counter votes;
     private final Counter reveals;
     private final Counter clears;
+    private final Counter timers;
     private final Map<LeaveReason, Counter> leaves = new EnumMap<>(LeaveReason.class);
 
     public RoomActivity(MeterRegistry registry) {
@@ -58,6 +59,9 @@ public class RoomActivity {
                 .register(registry);
         clears = Counter.builder("pipoker.rounds.cleared")
                 .description("Times the votes were cleared for a new round")
+                .register(registry);
+        timers = Counter.builder("pipoker.timers.started")
+                .description("Times the discussion timer was started")
                 .register(registry);
     }
 
@@ -92,6 +96,10 @@ public class RoomActivity {
 
     public void cleared() {
         clears.increment();
+    }
+
+    public void timerStarted() {
+        timers.increment();
     }
 
     private static Counter joined(MeterRegistry registry, String role) {

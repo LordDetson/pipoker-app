@@ -47,6 +47,7 @@ import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
@@ -175,6 +176,43 @@ class RoomServiceIT {
         assertFalse(nextRound.isVotesShown());
         assertTrue(nextRound.getVotes().isEmpty());
         assertThrows(RoomServiceException.class, () -> roomService.showVotes(UUID.randomUUID()));
+    }
+
+    @Test
+    @DisplayName("Everyone who opens the room sees the timer until it is stopped or the next round starts")
+    void timer() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        assertNull(roomService.get(roomId).getTimer());
+
+        // When
+        Timer started = roomService.startTimer(roomId, Duration.ofMinutes(2));
+
+        // Then
+        Timer stored = roomService.get(roomId).getTimer();
+        assertEquals(120, stored.getSeconds());
+        assertEquals(started.getEndsAt().toEpochMilli(), stored.getEndsAt().toEpochMilli());
+
+        // When another one is started, it takes the place of the first
+        roomService.startTimer(roomId, Duration.ofMinutes(1));
+
+        // Then
+        assertEquals(60, roomService.get(roomId).getTimer().getSeconds());
+
+        // When
+        roomService.stopTimer(roomId);
+
+        // Then
+        assertNull(roomService.get(roomId).getTimer());
+
+        // When
+        roomService.startTimer(roomId, Duration.ofMinutes(1));
+        roomService.clearVotes(roomId);
+
+        // Then
+        assertNull(roomService.get(roomId).getTimer());
+        assertThrows(RoomServiceException.class, () -> roomService.startTimer(UUID.randomUUID(), Duration.ofMinutes(1)));
+        assertThrows(RoomServiceException.class, () -> roomService.stopTimer(UUID.randomUUID()));
     }
 
     @Test
@@ -504,6 +542,8 @@ class RoomServiceIT {
         assertMarksActive(roomId, () -> roomService.removeVote(roomId, "Dmitry"));
         assertMarksActive(roomId, () -> roomService.showVotes(roomId));
         assertMarksActive(roomId, () -> roomService.clearVotes(roomId));
+        assertMarksActive(roomId, () -> roomService.startTimer(roomId, Duration.ofMinutes(1)));
+        assertMarksActive(roomId, () -> roomService.stopTimer(roomId));
 
         Instant past = Instant.now().minus(Duration.ofHours(1));
         setLastActivity(roomId, past);

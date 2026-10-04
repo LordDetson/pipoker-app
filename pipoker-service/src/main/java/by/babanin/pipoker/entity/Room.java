@@ -74,6 +74,10 @@ public class Room {
     @Getter
     private Instant lastActivity;
 
+    // The discussion timer, null when nobody has started one in this round
+    @Getter
+    private Timer timer;
+
     public Room(String name, Deck deck) {
         this.id = UUID.randomUUID();
         this.name = name;
@@ -219,8 +223,10 @@ public class Room {
         return Collections.unmodifiableList(history);
     }
 
+    // A new round also ends the discussion of the previous one, so its timer stops too
     public void clearVotes() {
         votes.clear();
         votesShown = false;
+        timer = null;
     }
 }

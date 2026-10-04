@@ -43,6 +43,7 @@ import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.repository.RoomRepository;
 import by.babanin.pipoker.util.StompTestClient;
@@ -225,6 +226,47 @@ class RoomApiIT {
     }
 
     @Test
+    @DisplayName("Everyone in the room counts down the same discussion timer")
+    void discussionTimer() throws Exception {
+        // Given
+        UUID roomId = createRoom(dmitry, "test", List.of("1"), new ParticipantDto("Dmitry", false)).getId();
+        String room = "/app/room/" + roomId;
+        BlockingQueue<RoomEvent> dmitryEvents = dmitry.subscribe("/topic/room." + roomId, RoomEvent.class);
+        BlockingQueue<RoomEvent> alexEvents = alex.subscribe("/topic/room." + roomId, RoomEvent.class);
+        alex.send(room + "/participants/add", new ParticipantDto("Alex", true));
+        next(dmitryEvents);
+        next(alexEvents);
+
+        // A watcher starts it too, and every page gets the time left
+        alex.send(room + "/timer/start", new TimerDto(120, null));
+        RoomEvent started = next(dmitryEvents);
+        assertEquals(EventType.TIMER_STARTED, started.getEventType());
+        assertEquals(120, started.getTimer().getSeconds());
+        assertTrue(started.getTimer().getRemainingMillis() > 115_000 && started.getTimer().getRemainingMillis() <= 120_000);
+        assertEquals(started.getTimer().getSeconds(), next(alexEvents).getTimer().getSeconds());
+
+        // Someone opening the room later counts down from where the others are
+        TimerDto timer = alex.request(room, RoomDto.class).getTimer();
+        assertEquals(120, timer.getSeconds());
+        assertTrue(timer.getRemainingMillis() <= started.getTimer().getRemainingMillis());
+
+        // Stopped early
+        dmitry.send(room + "/timer/stop", "");
+        RoomEvent stopped = new RoomEvent(roomId, EventType.TIMER_STOPPED);
+        assertEquals(stopped, next(dmitryEvents));
+        assertEquals(stopped, next(alexEvents));
+        assertNull(alex.request(room, RoomDto.class).getTimer());
+
+        // A new round takes the timer away with the votes
+        dmitry.send(room + "/timer/start", new TimerDto(60, null));
+        next(dmitryEvents);
+        next(alexEvents);
+        dmitry.send(room + "/votes/clear", "");
+        assertEquals(EventType.CLEAR_VOTES, next(alexEvents).getEventType());
+        assertNull(alex.request(room, RoomDto.class).getTimer());
+    }
+
+    @Test
     @DisplayName("Errors are sent only to the user who caused them")
     void errorsGoToSender() throws Exception {
         // Given
@@ -258,6 +300,12 @@ class RoomApiIT {
         dmitry.send(vote, new VoteDto("Dmitry", "100"));
         assertEquals(new ErrorEvent(vote, "Card with the value \"100\" is not found in the deck",
                 ErrorCode.CARD_NOT_IN_DECK), next(dmitryErrors));
+
+        // Timer too long
+        String timer = "/app/room/" + roomId + "/timer/start";
+        dmitry.send(timer, new TimerDto(3600, null));
+        assertEquals(new ErrorEvent(timer, "The timer can run from 10 seconds to 30 minutes", ErrorCode.INVALID_DATA),
+                next(dmitryErrors));
 
         // Nobody else saw those errors and no room event was sent for them
         assertNoMessage(events);

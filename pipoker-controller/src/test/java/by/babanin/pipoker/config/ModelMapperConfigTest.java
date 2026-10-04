@@ -15,11 +15,13 @@ import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomDto;
 import by.babanin.pipoker.model.RoundDto;
+import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 
 class ModelMapperConfigTest {
@@ -60,7 +62,8 @@ class ModelMapperConfigTest {
                 () -> assertEquals(List.of(new VoteDto("Dmitry", "2")), List.copyOf(dto.getVotes())),
                 () -> assertEquals("2", List.copyOf(dto.getVotes()).get(0).getCard()),
                 () -> assertEquals(List.of(new RoundDto(Instant.parse("2026-10-04T17:00:00Z"), List.of(new VoteDto("Dmitry", "2")))),
-                        dto.getHistory())
+                        dto.getHistory()),
+                () -> assertNull(dto.getTimer())
         );
         modelMapper.validate();
     }
@@ -134,5 +137,22 @@ class ModelMapperConfigTest {
 
         assertEquals("Dmitry", dto.getNickname());
         assertEquals("XL", dto.getCard());
+    }
+
+    @Test
+    @DisplayName("Timer is mapped to its length and the time left")
+    void mapTimer() {
+        Timer running = new Timer(120, Instant.now().plusSeconds(90));
+        Timer runOut = new Timer(60, Instant.now().minusSeconds(5));
+
+        TimerDto runningDto = modelMapper.map(running, TimerDto.class);
+        TimerDto runOutDto = modelMapper.map(runOut, TimerDto.class);
+
+        assertAll(
+                () -> assertEquals(120, runningDto.getSeconds()),
+                () -> assertTrue(runningDto.getRemainingMillis() > 89_000 && runningDto.getRemainingMillis() <= 90_000),
+                () -> assertEquals(60, runOutDto.getSeconds()),
+                () -> assertEquals(0, runOutDto.getRemainingMillis())
+        );
     }
 }

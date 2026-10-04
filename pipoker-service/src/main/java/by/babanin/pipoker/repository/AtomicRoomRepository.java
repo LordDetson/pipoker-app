@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 
 /**
@@ -14,7 +15,7 @@ import by.babanin.pipoker.entity.Vote;
  * that would overwrite whatever someone else changed in between.
  * <p>
  * The changes someone makes on purpose also mark the room as active (see {@link Room#getLastActivity()}): joining,
- * voting, taking a vote back, revealing the cards and starting a new round. Leaving and coming back after a refresh
+ * voting, taking a vote back, revealing the cards, starting a new round and starting or stopping the timer. Leaving and coming back after a refresh
  * or a lost connection don't, so a room where open pages merely stay connected is still idle.
  */
 public interface AtomicRoomRepository {
@@ -82,9 +83,21 @@ public interface AtomicRoomRepository {
     Optional<Room> showVotes(UUID roomId, Instant revealedAt);
 
     /**
-     * Starts a new round: no votes, cards hidden.
+     * Starts a new round: no votes, cards hidden, no timer.
      *
      * @return false when the room is missing
      */
     boolean clearVotes(UUID roomId);
+
+    /**
+     * Starts the discussion timer in place of the one that may be running.
+     *
+     * @return false when the room is missing
+     */
+    boolean startTimer(UUID roomId, Timer timer);
+
+    /**
+     * @return false when the room is missing
+     */
+    boolean stopTimer(UUID roomId);
 }
