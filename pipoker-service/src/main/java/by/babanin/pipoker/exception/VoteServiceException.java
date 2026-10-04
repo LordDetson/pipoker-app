@@ -1,8 +1,8 @@
 package by.babanin.pipoker.exception;
 
-import lombok.experimental.StandardException;
+public class VoteServiceException extends PiPokerException {
 
-@StandardException
-public class VoteServiceException extends RuntimeException {
-
+    public VoteServiceException(ErrorCode code, String message) {
+        super(code, message);
+    }
 }

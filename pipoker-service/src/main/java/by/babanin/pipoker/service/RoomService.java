@@ -20,6 +20,8 @@ import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.ErrorCode;
+import by.babanin.pipoker.exception.InvalidDataException;
 import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
@@ -50,9 +52,9 @@ public class RoomService {
 
     public Room create(String name, Deck deck, Set<Participant> participants) {
         if(deck == null) {
-            throw new RoomServiceException("Deck can't be null");
+            throw new InvalidDataException("Deck can't be null");
         }
-        AppUtils.validateAndThrow(validator, deck, RoomServiceException::new);
+        AppUtils.validateAndThrow(validator, deck, InvalidDataException::new);
         Room room = new Room(name, deck);
         if(CollectionUtils.isNotEmpty(participants)) {
             participants.forEach(participant -> {
@@ -64,7 +66,7 @@ public class RoomService {
                 }
             });
         }
-        AppUtils.validateAndThrow(validator, room, RoomServiceException::new);
+        AppUtils.validateAndThrow(validator, room, InvalidDataException::new);
         return roomRepository.save(room);
     }
 
@@ -128,13 +130,13 @@ public class RoomService {
                 ? Participant.createWatcher(nickname)
                 : Participant.createParticipant(nickname);
         if(participant.getKey() == null) {
-            throw new ConstraintException("Nickname can't be blank");
+            throw new ConstraintException(ErrorCode.INVALID_DATA, "Nickname can't be blank");
         }
-        AppUtils.validateAndThrow(validator, participant, RoomServiceException::new);
+        AppUtils.validateAndThrow(validator, participant, InvalidDataException::new);
         if(!roomRepository.addParticipant(roomId, participant)) {
             checkExists(roomId);
-            throw new ConstraintException(String.format("Participant \"%s\" is already exist in the room \"%s\"",
-                    participant.getNickname(), roomId));
+            throw new ConstraintException(ErrorCode.NICKNAME_TAKEN,
+                    String.format("Participant \"%s\" is already exist in the room \"%s\"", participant.getNickname(), roomId));
         }
         return participant;
     }
@@ -187,11 +189,12 @@ public class RoomService {
     public Vote addVote(UUID roomId, String nickname, String cardValue) {
         // The room explains a refused vote: unknown participant, a watcher or a card outside the deck
         Vote vote = get(roomId).addVote(nickname, cardValue);
-        AppUtils.validateAndThrow(validator, vote, RoomServiceException::new);
+        AppUtils.validateAndThrow(validator, vote, InvalidDataException::new);
         if(!roomRepository.addVote(roomId, vote)) {
             // The participant left or the room was deleted after it was read
             get(roomId).getParticipant(nickname);
-            throw new RoomServiceException(String.format("Vote of \"%s\" can't be stored in the room \"%s\"", nickname, roomId));
+            throw new RoomServiceException(ErrorCode.UNEXPECTED,
+                    String.format("Vote of \"%s\" can't be stored in the room \"%s\"", nickname, roomId));
         }
         return vote;
     }

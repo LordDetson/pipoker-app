@@ -10,6 +10,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.handler.annotation.support.MethodArgumentNotValidException;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.messaging.simp.annotation.SendToUser;
@@ -27,7 +28,8 @@ import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
-import by.babanin.pipoker.exception.RoomNotFoundException;
+import by.babanin.pipoker.exception.ErrorCode;
+import by.babanin.pipoker.exception.PiPokerException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
@@ -36,6 +38,7 @@ import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
 import by.babanin.pipoker.presence.SeatLocks;
 import by.babanin.pipoker.service.RoomService;
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 
@@ -182,7 +185,15 @@ public class RoomController {
     @SendToUser(destinations = PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION, broadcast = false)
     ErrorEvent handleException(Exception exception,
             @Header(name = SimpMessageHeaderAccessor.DESTINATION_HEADER, required = false) String destination) {
-        ErrorEvent.Code code = exception instanceof RoomNotFoundException ? ErrorEvent.Code.ROOM_NOT_FOUND : null;
-        return new ErrorEvent(destination, exception.getMessage(), code);
+        return new ErrorEvent(destination, exception.getMessage(), errorCode(exception));
+    }
+
+    private static ErrorCode errorCode(Exception exception) {
+        return switch(exception) {
+            case PiPokerException refused -> refused.getCode();
+            // The constraints of the messages and of the method parameters, checked before the method runs
+            case MethodArgumentNotValidException _, ConstraintViolationException _ -> ErrorCode.INVALID_DATA;
+            default -> ErrorCode.UNEXPECTED;
+        };
     }
 }

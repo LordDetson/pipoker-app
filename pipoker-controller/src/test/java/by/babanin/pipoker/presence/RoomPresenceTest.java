@@ -48,6 +48,7 @@ import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
+import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.VoteDto;
@@ -456,7 +457,7 @@ class RoomPresenceTest {
     void roomAlreadyGone() {
         presence.hold(room.getId(), "Alex", "alex-tab");
         presence.disconnected(disconnect("alex-tab", CloseStatus.NO_CLOSE_FRAME));
-        when(roomService.removeParticipant(room.getId(), "alex")).thenThrow(new RoomServiceException("Room is not found"));
+        when(roomService.removeParticipant(room.getId(), "alex")).thenThrow(new RoomNotFoundException("Room is not found"));
 
         scheduler.advance(LATER);
 

@@ -1,8 +1,8 @@
 package by.babanin.pipoker.exception;
 
-import lombok.experimental.StandardException;
+public class RoomServiceException extends PiPokerException {
 
-@StandardException
-public class RoomServiceException extends RuntimeException {
-
+    public RoomServiceException(ErrorCode code, String message) {
+        super(code, message);
+    }
 }

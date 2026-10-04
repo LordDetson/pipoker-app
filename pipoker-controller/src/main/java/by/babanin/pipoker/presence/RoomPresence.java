@@ -30,6 +30,7 @@ import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
+import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.VoteDto;
@@ -448,7 +449,8 @@ public class RoomPresence {
     }
 
     private static RoomServiceException notInRoom(UUID roomId, String nickname) {
-        return new RoomServiceException(String.format("Participant \"%s\" is not in the room \"%s\"", nickname, roomId));
+        return new RoomServiceException(ErrorCode.PARTICIPANT_NOT_FOUND,
+                String.format("Participant \"%s\" is not in the room \"%s\"", nickname, roomId));
     }
 
     private record SeatKey(UUID roomId, String nickname) {

@@ -1,11 +1,11 @@
 package by.babanin.pipoker.exception;
 
-import lombok.experimental.StandardException;
-
 /**
  * The room doesn't exist: everyone has left it, it was closed for inactivity, or the link is wrong.
  */
-@StandardException
 public class RoomNotFoundException extends RoomServiceException {
 
+    public RoomNotFoundException(String message) {
+        super(ErrorCode.ROOM_NOT_FOUND, message);
+    }
 }
