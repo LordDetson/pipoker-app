@@ -264,6 +264,20 @@ class RoomApiIT {
         dmitry.send(room + "/votes/clear", "");
         assertEquals(EventType.CLEAR_VOTES, next(alexEvents).getEventType());
         assertNull(alex.request(room, RoomDto.class).getTimer());
+        next(dmitryEvents);
+
+        // Revealing the cards ends the discussion: the timer stops and doesn't start again until the next round
+        dmitry.send(room + "/timer/start", new TimerDto(60, null));
+        next(dmitryEvents);
+        next(alexEvents);
+        dmitry.send(room + "/votes/show", "");
+        assertEquals(EventType.SHOW_VOTES, next(alexEvents).getEventType());
+        next(dmitryEvents);
+        assertNull(alex.request(room, RoomDto.class).getTimer());
+        BlockingQueue<ErrorEvent> alexErrors = alex.subscribe("/user/topic/room.errors", ErrorEvent.class);
+        alex.send(room + "/timer/start", new TimerDto(60, null));
+        assertEquals(ErrorCode.CARDS_REVEALED, next(alexErrors).getCode());
+        assertNull(alex.request(room, RoomDto.class).getTimer());
     }
 
     @Test

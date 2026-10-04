@@ -211,7 +211,7 @@ public class RoomService {
     // These updates find the room by its id alone, so finding nothing means the room is missing
 
     /**
-     * Reveals the cards of the current round.
+     * Reveals the cards of the current round and stops its timer.
      *
      * @return the round that entered the room's history, empty when the cards were already revealed or nobody voted
      */
@@ -233,6 +233,7 @@ public class RoomService {
 
     /**
      * Starts the discussion timer of the room for the given time, in place of the one that may be running.
+     * A round whose cards are revealed has nothing left to discuss, so its timer doesn't start.
      *
      * @return the started timer
      */
@@ -243,7 +244,9 @@ public class RoomService {
         }
         Timer timer = Timer.start(duration);
         if(!roomRepository.startTimer(roomId, timer)) {
-            throw notFound(roomId);
+            checkExists(roomId);
+            throw new RoomServiceException(ErrorCode.CARDS_REVEALED,
+                    "The cards are revealed, so the timer can start in the next round");
         }
         return timer;
     }

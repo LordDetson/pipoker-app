@@ -49,6 +49,7 @@ import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
 
@@ -179,7 +180,7 @@ class RoomServiceIT {
     }
 
     @Test
-    @DisplayName("Everyone who opens the room sees the timer until it is stopped or the next round starts")
+    @DisplayName("Everyone who opens the room sees the timer until it is stopped, the cards are revealed or the next round starts")
     void timer() {
         // Given
         UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
@@ -211,6 +212,23 @@ class RoomServiceIT {
 
         // Then
         assertNull(roomService.get(roomId).getTimer());
+
+        // When the cards are revealed, the discussion is over
+        roomService.startTimer(roomId, Duration.ofMinutes(1));
+        roomService.showVotes(roomId);
+
+        // Then
+        assertNull(roomService.get(roomId).getTimer());
+        RoomServiceException revealed = assertThrows(RoomServiceException.class,
+                () -> roomService.startTimer(roomId, Duration.ofMinutes(1)));
+        assertEquals(ErrorCode.CARDS_REVEALED, revealed.getCode());
+        assertNull(roomService.get(roomId).getTimer());
+
+        // When the next round starts, the timer can run again
+        roomService.clearVotes(roomId);
+
+        // Then
+        assertEquals(60, roomService.startTimer(roomId, Duration.ofMinutes(1)).getSeconds());
         assertThrows(RoomServiceException.class, () -> roomService.startTimer(UUID.randomUUID(), Duration.ofMinutes(1)));
         assertThrows(RoomServiceException.class, () -> roomService.stopTimer(UUID.randomUUID()));
     }
