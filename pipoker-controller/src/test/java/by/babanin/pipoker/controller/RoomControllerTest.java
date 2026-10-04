@@ -2,15 +2,20 @@ package by.babanin.pipoker.controller;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -36,6 +41,7 @@ import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.event.RoomEvent;
@@ -46,8 +52,10 @@ import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
+import by.babanin.pipoker.presence.SeatLocks;
 import by.babanin.pipoker.service.RoomService;
 import by.babanin.pipoker.util.TestStompSession;
 
@@ -78,6 +86,9 @@ class RoomControllerTest {
 
     @Autowired
     private ModelMapper modelMapper;
+
+    @Autowired
+    private SeatLocks seatLocks;
 
     /*private static ReachedState<RunningMongodProcess> running;*/
 
@@ -203,6 +214,45 @@ class RoomControllerTest {
     }
 
     @Test
+    void addParticipantWaitsForChangeOfSameSeat() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Participant participant = Participant.createParticipant("Dmitry");
+        ParticipantDto expectedResult = modelMapper.map(participant, ParticipantDto.class);
+        Mockito.when(roomService.addParticipant(roomId, participant.getNickname()))
+                .thenReturn(participant);
+        TestStompSession<RoomEvent> session = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId));
+        // The server is taking the same person away from the table and hasn't told the room yet
+        CountDownLatch changing = new CountDownLatch(1);
+        CountDownLatch told = new CountDownLatch(1);
+        Thread change = new Thread(() -> seatLocks.change(roomId, "dmitry", () -> {
+            changing.countDown();
+            try {
+                told.await();
+            }
+            catch(InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        change.start();
+        assertTrue(changing.await(5, TimeUnit.SECONDS));
+
+        // When
+        String destination = String.format("/%s/participants/add", roomId);
+        Queue<RoomEvent> results = session.send(
+                TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
+                expectedResult);
+
+        // Then
+        await().during(300, TimeUnit.MILLISECONDS).atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertNull(results.peek(), "the join is told after the change that started before"));
+        told.countDown();
+        change.join(5000);
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, expectedResult), results.poll()));
+    }
+
+    @Test
     void returnParticipant() throws Exception {
         // Given
         UUID roomId = UUID.randomUUID();
@@ -323,6 +373,12 @@ class RoomControllerTest {
     void showVotes() throws Exception {
         // Given
         UUID roomId = UUID.randomUUID();
+        Instant revealedAt = Instant.parse("2026-10-04T17:00:00.123Z");
+        Round round = new Round(revealedAt, List.of(
+                new Vote(Participant.createParticipant("Kate"), new Card("1d")),
+                new Vote(Participant.createParticipant("Dmitry"), new Card("1h"))));
+        when(roomService.showVotes(roomId))
+                .thenReturn(Optional.of(round));
 
         // When
         String destination = String.format("/%s/votes/show", roomId);
@@ -331,8 +387,9 @@ class RoomControllerTest {
                         roomId);
 
         // Then
+        RoundDto expectedRound = new RoundDto(revealedAt, List.of(new VoteDto("Dmitry", "1h"), new VoteDto("Kate", "1d")));
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES), results.poll()));
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES, expectedRound), results.poll()));
         Mockito.verify(roomService, times(1)).showVotes(roomId);
         Mockito.verify(activity).revealed();
     }

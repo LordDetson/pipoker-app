@@ -5,6 +5,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import by.babanin.pipoker.model.ParticipantDto;
+import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -52,15 +53,22 @@ public class RoomEvent {
 
     private VoteDto vote;
 
+    // SHOW_VOTES: the round that entered the room's history, none when the cards were already revealed
+    private RoundDto round;
+
     public RoomEvent(UUID roomId, EventType eventType) {
-        this(roomId, eventType, null, null);
+        this(roomId, eventType, null, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, ParticipantDto participant) {
-        this(roomId, eventType, participant, null);
+        this(roomId, eventType, participant, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, VoteDto vote) {
-        this(roomId, eventType, null, vote);
+        this(roomId, eventType, null, vote, null);
+    }
+
+    public RoomEvent(UUID roomId, EventType eventType, RoundDto round) {
+        this(roomId, eventType, null, null, round);
     }
 }

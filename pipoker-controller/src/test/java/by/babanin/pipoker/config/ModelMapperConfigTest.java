@@ -2,6 +2,7 @@ package by.babanin.pipoker.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -13,10 +14,12 @@ import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 
 class ModelMapperConfigTest {
@@ -40,6 +43,7 @@ class ModelMapperConfigTest {
         room.addParticipant("Dmitry");
         room.addWatcher("Alex");
         room.addVote("Dmitry", "2");
+        room.showVotes(Instant.parse("2026-10-04T17:00:00Z"));
 
         // When
         RoomDto dto = modelMapper.map(room, RoomDto.class);
@@ -54,8 +58,24 @@ class ModelMapperConfigTest {
                 () -> assertTrue(List.copyOf(dto.getParticipants()).get(0).isWatcher()),
                 () -> assertFalse(List.copyOf(dto.getParticipants()).get(1).isWatcher()),
                 () -> assertEquals(List.of(new VoteDto("Dmitry", "2")), List.copyOf(dto.getVotes())),
-                () -> assertEquals("2", List.copyOf(dto.getVotes()).get(0).getCard())
+                () -> assertEquals("2", List.copyOf(dto.getVotes()).get(0).getCard()),
+                () -> assertEquals(List.of(new RoundDto(Instant.parse("2026-10-04T17:00:00Z"), List.of(new VoteDto("Dmitry", "2")))),
+                        dto.getHistory())
         );
+        modelMapper.validate();
+    }
+
+    @Test
+    @DisplayName("Round is mapped with its votes sorted by nickname")
+    void mapRound() {
+        Instant revealedAt = Instant.parse("2026-10-04T17:00:00Z");
+        Round round = new Round(revealedAt, List.of(
+                new Vote(Participant.createParticipant("kate"), new Card("1")),
+                new Vote(Participant.createParticipant("Alex"), new Card("?"))));
+
+        RoundDto dto = modelMapper.map(round, RoundDto.class);
+
+        assertEquals(new RoundDto(revealedAt, List.of(new VoteDto("Alex", "?"), new VoteDto("kate", "1"))), dto);
         modelMapper.validate();
     }
 

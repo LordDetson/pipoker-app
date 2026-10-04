@@ -11,6 +11,7 @@ import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessageSendingOperations;
 import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.messaging.simp.annotation.SubscribeMapping;
 import org.springframework.stereotype.Controller;
@@ -30,8 +31,10 @@ import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
+import by.babanin.pipoker.presence.SeatLocks;
 import by.babanin.pipoker.service.RoomService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -43,14 +46,19 @@ public class RoomController {
 
     private final RoomService roomService;
     private final RoomPresence roomPresence;
+    private final SeatLocks seatLocks;
     private final RoomActivity activity;
     private final ModelMapper modelMapper;
+    private final SimpMessageSendingOperations messagingTemplate;
 
-    public RoomController(RoomService roomService, RoomPresence roomPresence, RoomActivity activity, ModelMapper modelMapper) {
+    public RoomController(RoomService roomService, RoomPresence roomPresence, SeatLocks seatLocks, RoomActivity activity,
+            ModelMapper modelMapper, SimpMessageSendingOperations messagingTemplate) {
         this.roomService = roomService;
         this.roomPresence = roomPresence;
+        this.seatLocks = seatLocks;
         this.activity = activity;
         this.modelMapper = modelMapper;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @MessageMapping("/create")
@@ -80,33 +88,36 @@ public class RoomController {
         return result;
     }
 
+    // Joining and leaving are told to the room while the person's seat lock is held (see SeatLocks)
     @MessageMapping({ "/{roomId}/participants/add", "/{roomId}/join" })
-    @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
-    RoomEvent addParticipant(@DestinationVariable UUID roomId, @Valid ParticipantDto participantDto,
+    void addParticipant(@DestinationVariable UUID roomId, @Valid ParticipantDto participantDto,
             @Header(SimpMessageHeaderAccessor.SESSION_ID_HEADER) String sessionId) {
         String nickname = participantDto.getNickname();
-        Participant added = participantDto.isWatcher()
-                ? roomService.addWatcher(roomId, nickname)
-                : roomService.addParticipant(roomId, nickname);
-        roomPresence.hold(roomId, added.getNickname(), sessionId);
-        activity.joined(added.isWatcher());
-        ParticipantDto result = modelMapper.map(added, ParticipantDto.class);
-        modelMapper.validate();
-        return new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, result);
+        seatLocks.change(roomId, nickname, () -> {
+            Participant added = participantDto.isWatcher()
+                    ? roomService.addWatcher(roomId, nickname)
+                    : roomService.addParticipant(roomId, nickname);
+            roomPresence.hold(roomId, added.getNickname(), sessionId);
+            activity.joined(added.isWatcher());
+            ParticipantDto result = modelMapper.map(added, ParticipantDto.class);
+            modelMapper.validate();
+            tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, result));
+        });
     }
 
     @MessageMapping({ "/{roomId}/participants/remove", "/{roomId}/participants/delete", "/{roomId}/left" })
-    @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
-    RoomEvent removeParticipant(@DestinationVariable UUID roomId, @NotBlank String nickname) {
-        ParticipantDto result = roomService.removeParticipant(roomId, nickname)
-                .map(participant -> {
-                    activity.left(LeaveReason.LEFT);
-                    return modelMapper.map(participant, ParticipantDto.class);
-                })
-                .orElse(null);
-        roomPresence.forget(roomId, nickname);
-        modelMapper.validate();
-        return new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, result);
+    void removeParticipant(@DestinationVariable UUID roomId, @NotBlank String nickname) {
+        seatLocks.change(roomId, nickname, () -> {
+            ParticipantDto result = roomService.removeParticipant(roomId, nickname)
+                    .map(participant -> {
+                        activity.left(LeaveReason.LEFT);
+                        return modelMapper.map(participant, ParticipantDto.class);
+                    })
+                    .orElse(null);
+            roomPresence.forget(roomId, nickname);
+            modelMapper.validate();
+            tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, result));
+        });
     }
 
     // A browser that lost its connection or refreshed the page comes back to the seat it had, while it is kept
@@ -155,9 +166,16 @@ public class RoomController {
     @MessageMapping("/{roomId}/votes/show")
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent showVotes(@DestinationVariable UUID roomId) {
-        roomService.showVotes(roomId);
+        RoundDto round = roomService.showVotes(roomId)
+                .map(recorded -> modelMapper.map(recorded, RoundDto.class))
+                .orElse(null);
         activity.revealed();
-        return new RoomEvent(roomId, EventType.SHOW_VOTES);
+        modelMapper.validate();
+        return new RoomEvent(roomId, EventType.SHOW_VOTES, round);
+    }
+
+    private void tellRoom(RoomEvent event) {
+        messagingTemplate.convertAndSend(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + "." + event.getRoomId(), event);
     }
 
     @MessageExceptionHandler

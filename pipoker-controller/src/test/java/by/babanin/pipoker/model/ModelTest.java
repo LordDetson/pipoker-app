@@ -2,6 +2,7 @@ package by.babanin.pipoker.model;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -93,7 +94,19 @@ class ModelTest {
     }
 
     @Test
-    @DisplayName("Room JSON leaves out empty participants and votes")
+    @DisplayName("Revealed cards event JSON carries the round that entered the history, with its time as text")
+    void writeShowVotesEvent() throws Exception {
+        UUID roomId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        RoundDto round = new RoundDto(Instant.parse("2026-10-04T17:00:00.123Z"), List.of(new VoteDto("Dmitry", "5")));
+
+        String json = objectMapper.writeValueAsString(new RoomEvent(roomId, EventType.SHOW_VOTES, round));
+
+        assertEquals("{\"roomId\":\"00000000-0000-0000-0000-000000000001\",\"eventType\":\"SHOW_VOTES\","
+                + "\"round\":{\"revealedAt\":\"2026-10-04T17:00:00.123Z\",\"votes\":[{\"nickname\":\"Dmitry\",\"card\":\"5\"}]}}", json);
+    }
+
+    @Test
+    @DisplayName("Room JSON leaves out empty participants, votes and history")
     void writeRoom() throws Exception {
         DeckDto deck = new DeckDto();
         deck.getCards().add("1");

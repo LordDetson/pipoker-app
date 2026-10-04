@@ -2,6 +2,7 @@ package by.babanin.pipoker.service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.RoomNotFoundException;
@@ -204,10 +206,17 @@ public class RoomService {
 
     // These updates find the room by its id alone, so finding nothing means the room is missing
 
-    public void showVotes(UUID roomId) {
-        if(!roomRepository.showVotes(roomId)) {
-            throw notFound(roomId);
-        }
+    /**
+     * Reveals the cards of the current round.
+     *
+     * @return the round that entered the room's history, empty when the cards were already revealed or nobody voted
+     */
+    public Optional<Round> showVotes(UUID roomId) {
+        // MongoDB keeps time in milliseconds, so the round told to the pages is the same as the stored one
+        Instant revealedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        Room before = roomRepository.showVotes(roomId, revealedAt).orElseThrow(() -> notFound(roomId));
+        // The room as it was makes the same decision the update made
+        return before.showVotes(revealedAt);
     }
 
     public void clearVotes(UUID roomId) {
