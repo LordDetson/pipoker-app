@@ -6,9 +6,13 @@ import static org.springframework.data.mongodb.core.query.Query.query;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,6 +46,7 @@ import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
@@ -170,6 +175,81 @@ class RoomServiceIT {
         assertFalse(nextRound.isVotesShown());
         assertTrue(nextRound.getVotes().isEmpty());
         assertThrows(RoomServiceException.class, () -> roomService.showVotes(UUID.randomUUID()));
+    }
+
+    @Test
+    @DisplayName("Every revealed round is kept in the room's history with who picked which card")
+    void history() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1", "2"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        roomService.addParticipant(roomId, "Alex");
+        roomService.addVote(roomId, "Dmitry", "2");
+        roomService.addVote(roomId, "Alex", "1");
+
+        // When
+        Round first = roomService.showVotes(roomId).orElseThrow();
+        Optional<Round> again = roomService.showVotes(roomId);
+        roomService.clearVotes(roomId);
+        roomService.removeParticipant(roomId, "Alex");
+        roomService.addVote(roomId, "Dmitry", "1");
+        Round second = roomService.showVotes(roomId).orElseThrow();
+
+        // Then
+        List<Round> history = roomService.get(roomId).getHistory();
+        assertAll(
+                () -> assertTrue(again.isEmpty()),
+                () -> assertEquals(List.of(first, second), history),
+                () -> assertEquals(List.of("Dmitry:2", "Alex:1"), votesOf(history.get(0))),
+                () -> assertEquals(List.of("Dmitry:1"), votesOf(history.get(1)))
+        );
+    }
+
+    @Test
+    @DisplayName("A round revealed by several people at once enters the history once")
+    void historyOfSimultaneousReveal() throws Exception {
+        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        roomService.addVote(roomId, "Dmitry", "1");
+
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        try {
+            List<Callable<Optional<Round>>> reveals = Collections.nCopies(8, () -> roomService.showVotes(roomId));
+            int recorded = 0;
+            for(Future<Optional<Round>> reveal : executor.invokeAll(reveals)) {
+                recorded += reveal.get().isPresent() ? 1 : 0;
+            }
+
+            assertEquals(1, recorded);
+            assertEquals(1, roomService.get(roomId).getHistory().size());
+        }
+        finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("The history keeps only the latest rounds")
+    void historyLimit() {
+        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        List<Round> recorded = new ArrayList<>();
+        for(int i = 0; i <= Room.HISTORY_LIMIT; i++) {
+            roomService.addVote(roomId, "Dmitry", "1");
+            recorded.add(roomService.showVotes(roomId).orElseThrow());
+            roomService.clearVotes(roomId);
+        }
+
+        assertEquals(recorded.subList(1, recorded.size()), roomService.get(roomId).getHistory());
+    }
+
+    @Test
+    @DisplayName("A room stored before the history was kept starts one with its next revealed round")
+    void historyOfOldRoom() {
+        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        roomService.addVote(roomId, "Dmitry", "1");
+        mongoTemplate.updateFirst(query(where("id").is(roomId)), new Update().unset("history").unset("votesShown"), Room.class);
+
+        Round round = roomService.showVotes(roomId).orElseThrow();
+
+        assertEquals(List.of(round), roomService.get(roomId).getHistory());
     }
 
     @Test
@@ -468,5 +548,11 @@ class RoomServiceIT {
             deck.add(cardValue);
         }
         return deck;
+    }
+
+    private static List<String> votesOf(Round round) {
+        return round.getVotes().stream()
+                .map(vote -> vote.getParticipant().getNickname() + ":" + vote.getCard().getValue())
+                .toList();
     }
 }
