@@ -14,7 +14,11 @@ public enum LeaveReason {
     /**
      * Didn't come back after the backend restarted.
      */
-    RESTART("restart", "the restart");
+    RESTART("restart", "the restart"),
+    /**
+     * Was in a room that nobody did anything in for long, so the room was closed.
+     */
+    ROOM_CLOSED("room_closed", "the room was closed for inactivity");
 
     private final String tag;
     private final String description;

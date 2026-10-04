@@ -1,5 +1,7 @@
 package by.babanin.pipoker.repository;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.data.mongodb.repository.MongoRepository;
@@ -15,4 +17,5 @@ import by.babanin.pipoker.entity.Room;
 @Repository
 public interface RoomRepository extends MongoRepository<Room, UUID>, AtomicRoomRepository {
 
+    List<Room> findByLastActivityBefore(Instant time);
 }

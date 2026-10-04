@@ -148,6 +148,28 @@ class RoomPresenceTest {
     }
 
     @Test
+    @DisplayName("Nobody leaves or comes back to a closed room")
+    void roomClosed() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(Duration.ZERO);
+        when(roomService.find(room.getId())).thenReturn(Optional.empty());
+
+        List<Participant> steppedAway = presence.roomClosed(room.getId());
+        presence.disconnected(disconnect("dmitry-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(LATER);
+
+        assertEquals(List.of(Participant.createParticipant("Alex")), steppedAway);
+        assertEquals(0, presence.peopleOnline());
+        verify(activity, never()).left(any());
+        verify(roomService, never()).removeParticipant(any(), anyString());
+        verify(roomService, never()).bringBack(any(), any());
+        assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
+    }
+
+    @Test
     @DisplayName("Someone who refreshes the page comes back to the table with their vote")
     void refreshesPage() {
         presence.hold(room.getId(), "Dmitry", "dmitry-tab");

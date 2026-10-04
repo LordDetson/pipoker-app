@@ -1,5 +1,6 @@
 package by.babanin.pipoker.entity;
 
+import java.time.Instant;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -59,10 +60,17 @@ public class Room {
     @Getter
     private boolean votesShown;
 
+    // When someone last did something in the room: created it, joined it, voted, revealed the cards or started a new
+    // round. A room nobody acts in for long is closed (see RoomService#closeIdleRooms). Rooms stored before this field
+    // existed have none until the backend marks them active when it starts.
+    @Getter
+    private Instant lastActivity;
+
     public Room(String name, Deck deck) {
         this.id = UUID.randomUUID();
         this.name = name;
         this.deck = deck;
+        this.lastActivity = Instant.now();
     }
 
     public void setDeck(Deck deck) {

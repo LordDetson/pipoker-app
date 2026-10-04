@@ -230,24 +230,25 @@ class RoomApiIT {
         // Taken nickname
         String join = "/app/room/" + roomId + "/participants/add";
         alex.send(join, new ParticipantDto("dmitry", false));
-        assertEquals(new ErrorEvent(join, String.format("Participant \"dmitry\" is already exist in the room \"%s\"", roomId)),
+        assertEquals(new ErrorEvent(join, String.format("Participant \"dmitry\" is already exist in the room \"%s\"", roomId), null),
                 next(alexErrors));
 
         // Missing room
         String missingJoin = "/app/room/" + missingRoomId + "/participants/add";
         alex.send(missingJoin, new ParticipantDto("Alex", false));
-        assertEquals(new ErrorEvent(missingJoin, String.format("Room \"%s\" is not found", missingRoomId)), next(alexErrors));
+        assertEquals(new ErrorEvent(missingJoin, String.format("Room \"%s\" is not found", missingRoomId),
+                ErrorEvent.Code.ROOM_NOT_FOUND), next(alexErrors));
 
         // Watcher's vote
         alex.send(join, new ParticipantDto("Alex", true));
         next(events);
         String vote = "/app/room/" + roomId + "/votes/add";
         alex.send(vote, new VoteDto("Alex", "1"));
-        assertEquals(new ErrorEvent(vote, "The participant \"Alex\" is a watcher, so can't vote"), next(alexErrors));
+        assertEquals(new ErrorEvent(vote, "The participant \"Alex\" is a watcher, so can't vote", null), next(alexErrors));
 
         // Card outside the deck
         dmitry.send(vote, new VoteDto("Dmitry", "100"));
-        assertEquals(new ErrorEvent(vote, "Card with the value \"100\" is not found in the deck"), next(dmitryErrors));
+        assertEquals(new ErrorEvent(vote, "Card with the value \"100\" is not found in the deck", null), next(dmitryErrors));
 
         // Nobody else saw those errors and no room event was sent for them
         assertNoMessage(events);

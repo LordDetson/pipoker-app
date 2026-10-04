@@ -2,8 +2,11 @@ package by.babanin.pipoker.presence;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -185,6 +188,30 @@ public class RoomPresence {
                 }
             });
         }
+    }
+
+    /**
+     * The room is closed, so nobody holds a seat in it anymore and nobody who stepped away can come back.
+     *
+     * @return the people who had stepped away from the table and could still come back
+     */
+    public List<Participant> roomClosed(UUID roomId) {
+        List<Participant> steppedAway = new ArrayList<>();
+        synchronized(lock) {
+            Iterator<Map.Entry<SeatKey, Seat>> entries = seats.entrySet().iterator();
+            while(entries.hasNext()) {
+                Map.Entry<SeatKey, Seat> entry = entries.next();
+                if(entry.getKey().roomId().equals(roomId)) {
+                    Seat seat = entry.getValue();
+                    release(entry.getKey(), seat);
+                    if(seat.departure != null) {
+                        steppedAway.add(seat.departure.participant());
+                    }
+                    entries.remove();
+                }
+            }
+        }
+        return steppedAway;
     }
 
     /**

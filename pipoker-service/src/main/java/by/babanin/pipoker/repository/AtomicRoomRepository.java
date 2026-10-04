@@ -1,5 +1,6 @@
 package by.babanin.pipoker.repository;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,6 +12,10 @@ import by.babanin.pipoker.entity.Vote;
  * Changes of a stored room, each made by one atomic MongoDB update of the room document.
  * Several people act in a room at the same time, so a change never reads the room and saves it back whole:
  * that would overwrite whatever someone else changed in between.
+ * <p>
+ * The changes someone makes on purpose also mark the room as active (see {@link Room#getLastActivity()}): joining,
+ * voting, taking a vote back, revealing the cards and starting a new round. Leaving and coming back after a refresh
+ * or a lost connection don't, so a room where open pages merely stay connected is still idle.
  */
 public interface AtomicRoomRepository {
 
@@ -39,6 +44,21 @@ public interface AtomicRoomRepository {
      * Deletes the room only if nobody is left in it, so someone joining at the same moment keeps the room.
      */
     boolean removeIfEmpty(UUID roomId);
+
+    /**
+     * Deletes the room only if nobody has done anything in it since the given time, so someone acting in it at the same
+     * moment keeps the room.
+     *
+     * @return the deleted room, empty when the room is missing or has been active since then
+     */
+    Optional<Room> removeIfIdle(UUID roomId, Instant idleSince);
+
+    /**
+     * Marks the rooms that don't know their last activity, stored before it was kept, as active at the given time.
+     *
+     * @return how many rooms were marked
+     */
+    long markActiveIfUnknown(Instant time);
 
     /**
      * Stores the vote in place of the participant's previous one.
