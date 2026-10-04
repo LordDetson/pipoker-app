@@ -34,6 +34,7 @@ import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.service.Departure;
+import by.babanin.pipoker.service.RoomRemovedEvent;
 import by.babanin.pipoker.service.RoomService;
 import lombok.extern.log4j.Log4j2;
 
@@ -247,6 +248,16 @@ public class RoomPresence {
                 }
             });
         }
+    }
+
+    /**
+     * Everyone left the room, so it was deleted. The pages still open on it, like the join form of someone who followed
+     * the invitation a moment before, are told that the room no longer exists.
+     */
+    @EventListener
+    public void roomRemoved(RoomRemovedEvent event) {
+        UUID roomId = event.roomId();
+        tellRoom(roomId, new RoomEvent(roomId, EventType.ROOM_REMOVED));
     }
 
     @EventListener(ApplicationReadyEvent.class)

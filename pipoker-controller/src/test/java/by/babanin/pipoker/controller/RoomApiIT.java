@@ -11,6 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -212,9 +213,10 @@ class RoomApiIT {
         // When
         alex.send(room + "/participants/remove", "Alex");
 
-        // Then
-        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", true)), next(events));
-        await().atMost(Duration.ofSeconds(5)).until(() -> !roomRepository.existsById(roomId));
+        // Then: the room is deleted while the event of the leaving is being sent, so either can come first
+        assertEquals(Set.of(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", true)),
+                new RoomEvent(roomId, EventType.ROOM_REMOVED)), Set.of(next(events), next(events)));
+        assertFalse(roomRepository.existsById(roomId));
     }
 
     @Test
@@ -409,6 +411,25 @@ class RoomApiIT {
 
         // Then the room is deleted after the grace period
         await().atMost(Duration.ofSeconds(GRACE_PERIOD_SECONDS + 10)).until(() -> !roomRepository.existsById(roomId));
+    }
+
+    @Test
+    @DisplayName("Someone who opened the invitation while the room was waiting is told when it is deleted")
+    void roomRemovedWhileInvitationIsOpen() throws Exception {
+        // Given the only person closed the page, and the room waits for them
+        UUID roomId = createRoom(dmitry, "test", List.of("1"), new ParticipantDto("Dmitry", false)).getId();
+        dmitry.send("/app/presence/page-closed", "");
+        dmitry.close();
+        await().atMost(Duration.ofSeconds(GRACE_PERIOD_SECONDS))
+                .until(() -> !roomRepository.findById(roomId).orElseThrow().haveParticipants());
+
+        // When someone opens the invitation meanwhile
+        BlockingQueue<RoomEvent> events = alex.subscribe("/topic/room." + roomId, RoomEvent.class);
+        assertEquals(roomId, alex.request("/app/room/" + roomId, RoomDto.class).getId());
+
+        // Then they are told once nobody came back and the room is deleted
+        assertEquals(new RoomEvent(roomId, EventType.ROOM_REMOVED), next(events));
+        assertFalse(roomRepository.existsById(roomId));
     }
 
     @Test

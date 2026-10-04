@@ -16,8 +16,11 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -37,6 +40,7 @@ import jakarta.validation.Validator;
 @TestPropertySource(properties = {
         "spring.main.banner-mode=off"
 })
+@RecordApplicationEvents
 public class RoomServiceTest {
 
     @TestConfiguration
@@ -48,8 +52,8 @@ public class RoomServiceTest {
         }
 
         @Bean
-        RoomService roomService(RoomRepository roomRepository, Validator validator) {
-            return new RoomService(roomRepository, validator);
+        RoomService roomService(RoomRepository roomRepository, Validator validator, ApplicationEventPublisher eventPublisher) {
+            return new RoomService(roomRepository, validator, eventPublisher);
         }
     }
 
@@ -61,6 +65,9 @@ public class RoomServiceTest {
 
     @Autowired
     private Validator validator;
+
+    @Autowired
+    private ApplicationEvents events;
 
     // Rooms
 
@@ -422,6 +429,25 @@ public class RoomServiceTest {
         assertEquals(Optional.of(first), removed);
         Mockito.verify(roomRepository).removeIfEmpty(before.getId());
         Mockito.verify(roomRepository, Mockito.never()).delete(ArgumentMatchers.any());
+        assertEquals(0, events.stream(RoomRemovedEvent.class).count());
+    }
+
+    @Test
+    @DisplayName("A room is announced as removed when the last participant leaves")
+    void removeLastParticipant() {
+        // Given
+        Room before = new Room("test", new Deck());
+        before.addParticipant("Last");
+        Mockito.when(roomRepository.removeParticipant(before.getId(), "last"))
+                .thenReturn(Optional.of(before));
+        Mockito.when(roomRepository.removeIfEmpty(before.getId()))
+                .thenReturn(true);
+
+        // When
+        roomService.removeParticipant(before.getId(), "Last");
+
+        // Then
+        assertEquals(List.of(new RoomRemovedEvent(before.getId())), events.stream(RoomRemovedEvent.class).toList());
     }
 
     @Test
@@ -493,7 +519,7 @@ public class RoomServiceTest {
     void removeLastParticipantKeepsRoomWhenRemovalIsOff() {
         // Given
         RoomRepository repository = Mockito.mock(RoomRepository.class);
-        RoomService service = new RoomService(repository, validator);
+        RoomService service = new RoomService(repository, validator, event -> {});
         ReflectionTestUtils.setField(service, "allowRemoveRoomIfNotHaveParticipants", false);
         Room before = new Room("test", new Deck());
         before.addParticipant("last");

@@ -31,7 +31,7 @@ class RoomValidationTest {
     @BeforeEach
     void setup() {
         roomRepository = Mockito.mock(RoomRepository.class);
-        roomService = new RoomService(roomRepository, Validation.buildDefaultValidatorFactory().getValidator());
+        roomService = new RoomService(roomRepository, Validation.buildDefaultValidatorFactory().getValidator(), event -> {});
     }
 
     @Test
