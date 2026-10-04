@@ -34,7 +34,9 @@ public class RoomActivity {
         connections = Counter.builder("pipoker.connections")
                 .description("Connections opened by browsers, including page refreshes and reconnects")
                 .register(registry);
-        roomsCreated = Counter.builder("pipoker.rooms.created")
+        // Not "pipoker.rooms.created": Prometheus reserves the _created suffix and would expose it as pipoker_rooms_total,
+        // which clashes with the pipoker.rooms gauge
+        roomsCreated = Counter.builder("pipoker.room.creations")
                 .description("Rooms created")
                 .register(registry);
         votersJoined = joined(registry, "voter");

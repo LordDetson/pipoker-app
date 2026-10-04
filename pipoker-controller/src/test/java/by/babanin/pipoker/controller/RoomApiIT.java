@@ -509,7 +509,7 @@ class RoomApiIT {
             assertAll(
                     () -> assertTrue(metrics.body().contains("pipoker_rooms 1.0"), "rooms now"),
                     () -> assertTrue(metrics.body().contains("pipoker_people_online 2.0"), "people online"),
-                    () -> assertTrue(metrics.body().contains("pipoker_rooms_created_total "), "rooms created"),
+                    () -> assertTrue(metrics.body().contains("pipoker_room_creations_total "), "rooms created"),
                     () -> assertTrue(metrics.body().contains("pipoker_participants_joined_total{role=\"watcher\""), "joined"),
                     () -> assertTrue(metrics.body().contains("pipoker_votes_total "), "votes"),
                     () -> assertTrue(metrics.body().contains("pipoker_connections_total "), "connections")
