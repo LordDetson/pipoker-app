@@ -21,6 +21,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import by.babanin.pipoker.PiPokerApplication;
+import by.babanin.pipoker.activity.LeaveReason;
+import by.babanin.pipoker.activity.RoomActivity;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.event.RoomEvent;
@@ -49,6 +51,7 @@ public class RoomPresence {
     private final RoomService roomService;
     private final ModelMapper modelMapper;
     private final SimpMessageSendingOperations messagingTemplate;
+    private final RoomActivity activity;
     private final TaskScheduler scheduler;
     private final Duration gracePeriod;
     private final Duration startupGracePeriod;
@@ -61,12 +64,13 @@ public class RoomPresence {
     private final Set<String> closingSessions = new HashSet<>();
 
     public RoomPresence(RoomService roomService, ModelMapper modelMapper, SimpMessageSendingOperations messagingTemplate,
-            @Qualifier("roomPresenceScheduler") TaskScheduler scheduler,
+            RoomActivity activity, @Qualifier("roomPresenceScheduler") TaskScheduler scheduler,
             @Value("${presence.grace-period:10s}") Duration gracePeriod,
             @Value("${presence.startup-grace-period:30s}") Duration startupGracePeriod) {
         this.roomService = roomService;
         this.modelMapper = modelMapper;
         this.messagingTemplate = messagingTemplate;
+        this.activity = activity;
         this.scheduler = scheduler;
         this.gracePeriod = gracePeriod;
         this.startupGracePeriod = startupGracePeriod;
@@ -151,9 +155,20 @@ public class RoomPresence {
             }
             seats.forEach((seatKey, seat) -> {
                 if(sessionId.equals(seat.closedSessionId) && seat.sessionIds.isEmpty() && !seat.leaving) {
-                    scheduleLeaving(seatKey, seat, Instant.now(), "closing the page");
+                    scheduleLeaving(seatKey, seat, Instant.now(), LeaveReason.PAGE_CLOSED);
                 }
             });
+        }
+    }
+
+    /**
+     * How many people are at the table with an open connection right now.
+     */
+    public int peopleOnline() {
+        synchronized(lock) {
+            return (int) seats.values().stream()
+                    .filter(seat -> !seat.sessionIds.isEmpty())
+                    .count();
         }
     }
 
@@ -170,10 +185,10 @@ public class RoomPresence {
                 Seat seat = seats.get(seatKey);
                 if(seat != null && seat.sessionIds.remove(sessionId) && seat.sessionIds.isEmpty()) {
                     if(pageClosed) {
-                        scheduleLeaving(seatKey, seat, Instant.now(), "closing the page");
+                        scheduleLeaving(seatKey, seat, Instant.now(), LeaveReason.PAGE_CLOSED);
                     }
                     else {
-                        scheduleLeaving(seatKey, seat, Instant.now().plus(gracePeriod), "losing the connection");
+                        scheduleLeaving(seatKey, seat, Instant.now().plus(gracePeriod), LeaveReason.CONNECTION_LOST);
                     }
                     seat.closedSessionId = sessionId;
                 }
@@ -190,7 +205,7 @@ public class RoomPresence {
                     if(!seats.containsKey(seatKey)) {
                         Seat seat = new Seat();
                         seats.put(seatKey, seat);
-                        scheduleLeaving(seatKey, seat, Instant.now().plus(startupGracePeriod), "the restart");
+                        scheduleLeaving(seatKey, seat, Instant.now().plus(startupGracePeriod), LeaveReason.RESTART);
                     }
                 }
             }
@@ -216,13 +231,13 @@ public class RoomPresence {
     }
 
     // The leaving runs on the scheduler, outside the lock, also when it is due at once
-    private void scheduleLeaving(SeatKey seatKey, Seat seat, Instant time, String reason) {
+    private void scheduleLeaving(SeatKey seatKey, Seat seat, Instant time, LeaveReason reason) {
         seat.cancelLeaving();
         int attempt = seat.leavingAttempt;
         seat.scheduledLeaving = scheduler.schedule(() -> leave(seatKey, seat, attempt, reason), time);
     }
 
-    private void leave(SeatKey seatKey, Seat seat, int attempt, String reason) {
+    private void leave(SeatKey seatKey, Seat seat, int attempt, LeaveReason reason) {
         synchronized(lock) {
             if(seats.get(seatKey) != seat || seat.leavingAttempt != attempt || !seat.sessionIds.isEmpty()) {
                 return;
@@ -231,7 +246,8 @@ public class RoomPresence {
         }
         try {
             roomService.removeParticipant(seatKey.roomId(), seatKey.nickname()).ifPresent(participant -> {
-                log.info("{} left the room {} after {}", participant.getNickname(), seatKey.roomId(), reason);
+                log.info("{} left the room {} after {}", participant.getNickname(), seatKey.roomId(), reason.description());
+                activity.left(reason);
                 ParticipantDto removed = modelMapper.map(participant, ParticipantDto.class);
                 messagingTemplate.convertAndSend(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + "." + seatKey.roomId(),
                         new RoomEvent(seatKey.roomId(), EventType.PARTICIPANT_REMOVED, removed));

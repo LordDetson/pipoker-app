@@ -28,6 +28,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import by.babanin.pipoker.PiPokerApplication;
+import by.babanin.pipoker.activity.LeaveReason;
+import by.babanin.pipoker.activity.RoomActivity;
 import by.babanin.pipoker.config.TestWebSocketConfig;
 import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
@@ -65,6 +67,9 @@ class RoomControllerTest {
 
     @MockBean
     private RoomPresence roomPresence;
+
+    @MockBean
+    private RoomActivity activity;
 
     @Autowired
     private WebSocketStompClient webSocketStompClient;
@@ -144,6 +149,9 @@ class RoomControllerTest {
         // The creator's connection holds the seats of the people in the new room
         Mockito.verify(roomPresence).hold(eq(room.getId()), eq("Dmitry"), anyString());
         Mockito.verify(roomPresence).hold(eq(room.getId()), eq("Alex"), anyString());
+        Mockito.verify(activity).roomCreated();
+        Mockito.verify(activity).joined(false);
+        Mockito.verify(activity).joined(true);
     }
 
     @Test
@@ -166,6 +174,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, expectedResult), results.poll()));
         Mockito.verify(roomPresence).hold(eq(roomId), eq("Dmitry"), anyString());
+        Mockito.verify(activity).joined(false);
     }
 
     @Test
@@ -188,6 +197,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, expectedResult), results.poll()));
         Mockito.verify(roomPresence).forget(roomId, "Dmitry");
+        Mockito.verify(activity).left(LeaveReason.LEFT);
     }
 
     @Test
@@ -208,6 +218,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(
                         new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, new ParticipantDto("Dmitry", true)), results.poll()));
+        Mockito.verify(activity).returned();
     }
 
     @Test
@@ -231,6 +242,7 @@ class RoomControllerTest {
         // Then
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.VOTE_ADDED, expectedResult), results.poll()));
+        Mockito.verify(activity).voted();
     }
 
     @Test
@@ -271,6 +283,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.CLEAR_VOTES), results.poll()));
         Mockito.verify(roomService, times(1)).clearVotes(roomId);
+        Mockito.verify(activity).cleared();
     }
 
     @Test
@@ -316,6 +329,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES), results.poll()));
         Mockito.verify(roomService, times(1)).showVotes(roomId);
+        Mockito.verify(activity).revealed();
     }
 
     @Test

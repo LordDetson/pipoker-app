@@ -17,6 +17,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.validation.annotation.Validated;
 
 import by.babanin.pipoker.PiPokerApplication;
+import by.babanin.pipoker.activity.LeaveReason;
+import by.babanin.pipoker.activity.RoomActivity;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
@@ -40,11 +42,13 @@ public class RoomController {
 
     private final RoomService roomService;
     private final RoomPresence roomPresence;
+    private final RoomActivity activity;
     private final ModelMapper modelMapper;
 
-    public RoomController(RoomService roomService, RoomPresence roomPresence, ModelMapper modelMapper) {
+    public RoomController(RoomService roomService, RoomPresence roomPresence, RoomActivity activity, ModelMapper modelMapper) {
         this.roomService = roomService;
         this.roomPresence = roomPresence;
+        this.activity = activity;
         this.modelMapper = modelMapper;
     }
 
@@ -57,7 +61,11 @@ public class RoomController {
                 .map(participantDto -> modelMapper.map(participantDto, Participant.class))
                 .collect(Collectors.toUnmodifiableSet());
         Room room = roomService.create(roomCreationDto.getName(), deck, participants);
-        room.getParticipants().forEach(participant -> roomPresence.hold(room.getId(), participant.getNickname(), sessionId));
+        activity.roomCreated();
+        room.getParticipants().forEach(participant -> {
+            roomPresence.hold(room.getId(), participant.getNickname(), sessionId);
+            activity.joined(participant.isWatcher());
+        });
         RoomDto result = modelMapper.map(room, RoomDto.class);
         modelMapper.validate();
         return result;
@@ -80,6 +88,7 @@ public class RoomController {
                 ? roomService.addWatcher(roomId, nickname)
                 : roomService.addParticipant(roomId, nickname);
         roomPresence.hold(roomId, added.getNickname(), sessionId);
+        activity.joined(added.isWatcher());
         ParticipantDto result = modelMapper.map(added, ParticipantDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, result);
@@ -89,7 +98,10 @@ public class RoomController {
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent removeParticipant(@DestinationVariable UUID roomId, @NotBlank String nickname) {
         ParticipantDto result = roomService.removeParticipant(roomId, nickname)
-                .map(participant -> modelMapper.map(participant, ParticipantDto.class))
+                .map(participant -> {
+                    activity.left(LeaveReason.LEFT);
+                    return modelMapper.map(participant, ParticipantDto.class);
+                })
                 .orElse(null);
         roomPresence.forget(roomId, nickname);
         modelMapper.validate();
@@ -102,6 +114,7 @@ public class RoomController {
     RoomEvent returnParticipant(@DestinationVariable UUID roomId, @NotBlank String nickname,
             @Header(SimpMessageHeaderAccessor.SESSION_ID_HEADER) String sessionId) {
         Participant participant = roomPresence.returnTo(roomId, nickname, sessionId);
+        activity.returned();
         ParticipantDto result = modelMapper.map(participant, ParticipantDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, result);
@@ -111,6 +124,7 @@ public class RoomController {
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent addVote(@DestinationVariable UUID roomId, @Valid VoteDto vote) {
         Vote added = roomService.addVote(roomId, vote.getNickname(), vote.getCard());
+        activity.voted();
         VoteDto result = modelMapper.map(added, VoteDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.VOTE_ADDED, result);
@@ -130,6 +144,7 @@ public class RoomController {
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent clearVotes(@DestinationVariable UUID roomId) {
         roomService.clearVotes(roomId);
+        activity.cleared();
         return new RoomEvent(roomId, EventType.CLEAR_VOTES);
     }
 
@@ -137,6 +152,7 @@ public class RoomController {
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent showVotes(@DestinationVariable UUID roomId) {
         roomService.showVotes(roomId);
+        activity.revealed();
         return new RoomEvent(roomId, EventType.SHOW_VOTES);
     }
 

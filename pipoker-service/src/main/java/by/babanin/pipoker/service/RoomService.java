@@ -72,6 +72,10 @@ public class RoomService {
         return roomRepository.findAll();
     }
 
+    public long count() {
+        return roomRepository.count();
+    }
+
     public Optional<Room> remove(UUID id) {
         Optional<Room> room = find(id);
         room.ifPresent(roomRepository::delete);
