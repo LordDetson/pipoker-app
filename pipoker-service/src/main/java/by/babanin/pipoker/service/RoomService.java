@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.RoomNotFoundException;
@@ -212,6 +213,31 @@ public class RoomService {
 
     public void clearVotes(UUID roomId) {
         if(!roomRepository.clearVotes(roomId)) {
+            throw notFound(roomId);
+        }
+    }
+
+    // Timer
+
+    /**
+     * Starts the discussion timer of the room for the given time, in place of the one that may be running.
+     *
+     * @return the started timer
+     */
+    public Timer startTimer(UUID roomId, Duration duration) {
+        if(duration.compareTo(Timer.MIN_DURATION) < 0 || duration.compareTo(Timer.MAX_DURATION) > 0) {
+            throw new RoomServiceException(String.format("The timer can run from %d seconds to %d minutes",
+                    Timer.MIN_DURATION.toSeconds(), Timer.MAX_DURATION.toMinutes()));
+        }
+        Timer timer = Timer.start(duration);
+        if(!roomRepository.startTimer(roomId, timer)) {
+            throw notFound(roomId);
+        }
+        return timer;
+    }
+
+    public void stopTimer(UUID roomId) {
+        if(!roomRepository.stopTimer(roomId)) {
             throw notFound(roomId);
         }
     }

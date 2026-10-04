@@ -31,6 +31,7 @@ class RoomActivityTest {
         activity.voted();
         activity.revealed();
         activity.cleared();
+        activity.timerStarted();
         activity.returned();
         activity.left(LeaveReason.CONNECTION_LOST);
 
@@ -41,6 +42,7 @@ class RoomActivityTest {
         assertEquals(2, count("pipoker.votes"));
         assertEquals(1, count("pipoker.rounds.revealed"));
         assertEquals(1, count("pipoker.rounds.cleared"));
+        assertEquals(1, count("pipoker.timers.started"));
         assertEquals(1, count("pipoker.participants.returned"));
         assertEquals(1, registry.get("pipoker.participants.left").tag("reason", "connection_lost").counter().count());
         assertEquals(0, registry.get("pipoker.participants.left").tag("reason", "left").counter().count());

@@ -1,5 +1,6 @@
 package by.babanin.pipoker.controller;
 
+import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -22,6 +23,7 @@ import by.babanin.pipoker.activity.RoomActivity;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.event.RoomEvent;
@@ -30,6 +32,7 @@ import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
 import by.babanin.pipoker.service.RoomService;
@@ -158,6 +161,23 @@ public class RoomController {
         roomService.showVotes(roomId);
         activity.revealed();
         return new RoomEvent(roomId, EventType.SHOW_VOTES);
+    }
+
+    @MessageMapping("/{roomId}/timer/start")
+    @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
+    RoomEvent startTimer(@DestinationVariable UUID roomId, TimerDto timerDto) {
+        Timer started = roomService.startTimer(roomId, Duration.ofSeconds(timerDto.getSeconds()));
+        activity.timerStarted();
+        TimerDto result = modelMapper.map(started, TimerDto.class);
+        modelMapper.validate();
+        return new RoomEvent(roomId, EventType.TIMER_STARTED, result);
+    }
+
+    @MessageMapping("/{roomId}/timer/stop")
+    @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
+    RoomEvent stopTimer(@DestinationVariable UUID roomId) {
+        roomService.stopTimer(roomId);
+        return new RoomEvent(roomId, EventType.TIMER_STOPPED);
     }
 
     @MessageExceptionHandler

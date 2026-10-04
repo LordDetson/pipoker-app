@@ -2,6 +2,7 @@ package by.babanin.pipoker.config;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -13,10 +14,12 @@ import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 
 class ModelMapperConfigTest {
@@ -54,7 +57,8 @@ class ModelMapperConfigTest {
                 () -> assertTrue(List.copyOf(dto.getParticipants()).get(0).isWatcher()),
                 () -> assertFalse(List.copyOf(dto.getParticipants()).get(1).isWatcher()),
                 () -> assertEquals(List.of(new VoteDto("Dmitry", "2")), List.copyOf(dto.getVotes())),
-                () -> assertEquals("2", List.copyOf(dto.getVotes()).get(0).getCard())
+                () -> assertEquals("2", List.copyOf(dto.getVotes()).get(0).getCard()),
+                () -> assertNull(dto.getTimer())
         );
         modelMapper.validate();
     }
@@ -114,5 +118,22 @@ class ModelMapperConfigTest {
 
         assertEquals("Dmitry", dto.getNickname());
         assertEquals("XL", dto.getCard());
+    }
+
+    @Test
+    @DisplayName("Timer is mapped to its length and the time left")
+    void mapTimer() {
+        Timer running = new Timer(120, Instant.now().plusSeconds(90));
+        Timer runOut = new Timer(60, Instant.now().minusSeconds(5));
+
+        TimerDto runningDto = modelMapper.map(running, TimerDto.class);
+        TimerDto runOutDto = modelMapper.map(runOut, TimerDto.class);
+
+        assertAll(
+                () -> assertEquals(120, runningDto.getSeconds()),
+                () -> assertTrue(runningDto.getRemainingMillis() > 89_000 && runningDto.getRemainingMillis() <= 90_000),
+                () -> assertEquals(60, runOutDto.getSeconds()),
+                () -> assertEquals(0, runOutDto.getRemainingMillis())
+        );
     }
 }

@@ -5,6 +5,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import by.babanin.pipoker.model.ParticipantDto;
+import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -32,6 +33,14 @@ public class RoomEvent {
         CLEAR_VOTES,
         SHOW_VOTES,
         /**
+         * Someone started the discussion timer, in place of the one that may be running.
+         */
+        TIMER_STARTED,
+        /**
+         * Someone stopped the discussion timer before it ran out, or took away the one that had.
+         */
+        TIMER_STOPPED,
+        /**
          * The room was closed because nobody did anything in it for long, and everyone left it.
          */
         ROOM_CLOSED,
@@ -52,15 +61,21 @@ public class RoomEvent {
 
     private VoteDto vote;
 
+    private TimerDto timer;
+
     public RoomEvent(UUID roomId, EventType eventType) {
-        this(roomId, eventType, null, null);
+        this(roomId, eventType, null, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, ParticipantDto participant) {
-        this(roomId, eventType, participant, null);
+        this(roomId, eventType, participant, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, VoteDto vote) {
-        this(roomId, eventType, null, vote);
+        this(roomId, eventType, null, vote, null);
+    }
+
+    public RoomEvent(UUID roomId, EventType eventType, TimerDto timer) {
+        this(roomId, eventType, null, null, timer);
     }
 }

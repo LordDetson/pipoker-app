@@ -8,14 +8,17 @@ import org.springframework.context.annotation.Configuration;
 import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
+import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.model.converter.CardConverter;
 import by.babanin.pipoker.model.converter.DeckDtoConverter;
 import by.babanin.pipoker.model.converter.ParticipantDtoConverter;
 import by.babanin.pipoker.model.converter.ParticipantConverter;
+import by.babanin.pipoker.model.converter.TimerToDtoConverter;
 import by.babanin.pipoker.model.converter.VoteToDtoConverter;
 
 @Configuration
@@ -36,6 +39,7 @@ public class ModelMapperConfig {
         modelMapper.addConverter(new ParticipantConverter(), Participant.class, String.class);
         modelMapper.addConverter(new CardConverter(), Card.class, String.class);
         modelMapper.addConverter(new VoteToDtoConverter(), Vote.class, VoteDto.class);
+        modelMapper.addConverter(new TimerToDtoConverter(), Timer.class, TimerDto.class);
 
         return modelMapper;
     }

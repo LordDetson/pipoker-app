@@ -16,6 +16,7 @@ import org.springframework.data.mongodb.core.query.Update;
 
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 
 class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
@@ -25,6 +26,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     private static final String VOTES = "votes";
     private static final String VOTES_SHOWN = "votesShown";
     private static final String LAST_ACTIVITY = "lastActivity";
+    private static final String TIMER = "timer";
     private static final String PARTICIPANT_KEY = "key";
     private static final String VOTE_KEY = "participant.key";
 
@@ -114,7 +116,20 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
 
     @Override
     public boolean clearVotes(UUID roomId) {
-        Update update = new Update().set(VOTES, List.of()).set(VOTES_SHOWN, false).set(LAST_ACTIVITY, Instant.now());
+        Update update = new Update().set(VOTES, List.of()).set(VOTES_SHOWN, false).unset(TIMER)
+                .set(LAST_ACTIVITY, Instant.now());
+        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
+    }
+
+    @Override
+    public boolean startTimer(UUID roomId, Timer timer) {
+        Update update = new Update().set(TIMER, toDocument(timer)).set(LAST_ACTIVITY, Instant.now());
+        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
+    }
+
+    @Override
+    public boolean stopTimer(UUID roomId) {
+        Update update = new Update().unset(TIMER).set(LAST_ACTIVITY, Instant.now());
         return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 

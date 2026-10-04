@@ -48,4 +48,7 @@ public class RoomDto {
     // The cards of the current round are revealed; left out of the JSON while they are hidden
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     private boolean votesShown;
+
+    // The discussion timer, left out of the JSON when nobody has started one in this round
+    private TimerDto timer;
 }
