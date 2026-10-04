@@ -108,7 +108,7 @@ public class RoomController {
         return new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, result);
     }
 
-    // A browser that lost its connection comes back to the seat it had, while the participant is still in the room
+    // A browser that lost its connection or refreshed the page comes back to the seat it had, while it is kept
     @MessageMapping("/{roomId}/participants/return")
     @SendToUser(destinations = PiPokerApplication.TOPIC_ROOM_RETURNED_DESTINATION, broadcast = false)
     RoomEvent returnParticipant(@DestinationVariable UUID roomId, @NotBlank String nickname,
@@ -143,6 +143,9 @@ public class RoomController {
     @MessageMapping("/{roomId}/votes/clear")
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent clearVotes(@DestinationVariable UUID roomId) {
+        // First, so someone who comes back after refreshing the page meanwhile doesn't bring a vote into the new round:
+        // either they come back without it, or their vote is cleared with the others
+        roomPresence.votesCleared(roomId);
         roomService.clearVotes(roomId);
         activity.cleared();
         return new RoomEvent(roomId, EventType.CLEAR_VOTES);

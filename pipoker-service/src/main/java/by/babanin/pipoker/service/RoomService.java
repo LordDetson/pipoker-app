@@ -112,14 +112,45 @@ public class RoomService {
     }
 
     public Optional<Participant> removeParticipant(UUID roomId, String nickname) {
-        Optional<Participant> removed = roomRepository.removeParticipant(roomId, Participant.normalizeNickname(nickname));
-        if(removed.isEmpty()) {
-            checkExists(roomId);
-        }
-        else if(allowRemoveRoomIfNotHaveParticipants) {
-            roomRepository.removeIfEmpty(roomId);
+        Optional<Participant> removed = stepAway(roomId, nickname).map(Departure::participant);
+        if(removed.isPresent()) {
+            removeIfEmpty(roomId);
         }
         return removed;
+    }
+
+    /**
+     * Takes the participant away from the table together with their vote, but keeps the room even if nobody is left
+     * in it: the participant may come back in a moment with {@link #bringBack}.
+     *
+     * @return the participant and their vote, empty when the room has no such participant
+     */
+    public Optional<Departure> stepAway(UUID roomId, String nickname) {
+        String key = Participant.normalizeNickname(nickname);
+        Optional<Room> before = roomRepository.removeParticipant(roomId, key);
+        if(before.isEmpty()) {
+            checkExists(roomId);
+        }
+        return before.flatMap(room -> room.findParticipant(key)
+                .map(participant -> new Departure(participant, room.findVote(key).orElse(null))));
+    }
+
+    /**
+     * Brings the participant back to the table with the vote they had when they stepped away.
+     *
+     * @return false when the room is missing or someone else took the nickname meanwhile
+     */
+    public boolean bringBack(UUID roomId, Departure departure) {
+        return roomRepository.returnParticipant(roomId, departure.participant(), departure.vote());
+    }
+
+    /**
+     * Deletes the room if nobody is left in it, so someone joining at the same moment keeps the room.
+     */
+    public void removeIfEmpty(UUID roomId) {
+        if(allowRemoveRoomIfNotHaveParticipants) {
+            roomRepository.removeIfEmpty(roomId);
+        }
     }
 
     // Votes

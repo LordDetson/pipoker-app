@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -282,7 +283,10 @@ class RoomControllerTest {
         // Then
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.CLEAR_VOTES), results.poll()));
-        Mockito.verify(roomService, times(1)).clearVotes(roomId);
+        // Whoever stepped away comes back without the vote of the previous round
+        InOrder inOrder = Mockito.inOrder(roomPresence, roomService);
+        inOrder.verify(roomPresence).votesCleared(roomId);
+        inOrder.verify(roomService).clearVotes(roomId);
         Mockito.verify(activity).cleared();
     }
 
