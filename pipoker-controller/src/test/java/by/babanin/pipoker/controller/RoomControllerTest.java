@@ -2,6 +2,8 @@ package by.babanin.pipoker.controller;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
@@ -11,6 +13,7 @@ import java.util.Collections;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -48,6 +51,7 @@ import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
+import by.babanin.pipoker.presence.SeatLocks;
 import by.babanin.pipoker.service.RoomService;
 import by.babanin.pipoker.util.TestStompSession;
 
@@ -78,6 +82,9 @@ class RoomControllerTest {
 
     @Autowired
     private ModelMapper modelMapper;
+
+    @Autowired
+    private SeatLocks seatLocks;
 
     /*private static ReachedState<RunningMongodProcess> running;*/
 
@@ -200,6 +207,45 @@ class RoomControllerTest {
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, expectedResult), results.poll()));
         Mockito.verify(roomPresence).forget(roomId, "Dmitry");
         Mockito.verify(activity).left(LeaveReason.LEFT);
+    }
+
+    @Test
+    void addParticipantWaitsForChangeOfSameSeat() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Participant participant = Participant.createParticipant("Dmitry");
+        ParticipantDto expectedResult = modelMapper.map(participant, ParticipantDto.class);
+        Mockito.when(roomService.addParticipant(roomId, participant.getNickname()))
+                .thenReturn(participant);
+        TestStompSession<RoomEvent> session = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId));
+        // The server is taking the same person away from the table and hasn't told the room yet
+        CountDownLatch changing = new CountDownLatch(1);
+        CountDownLatch told = new CountDownLatch(1);
+        Thread change = new Thread(() -> seatLocks.change(roomId, "dmitry", () -> {
+            changing.countDown();
+            try {
+                told.await();
+            }
+            catch(InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            }
+        }));
+        change.start();
+        assertTrue(changing.await(5, TimeUnit.SECONDS));
+
+        // When
+        String destination = String.format("/%s/participants/add", roomId);
+        Queue<RoomEvent> results = session.send(
+                TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
+                expectedResult);
+
+        // Then
+        await().during(300, TimeUnit.MILLISECONDS).atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertNull(results.peek(), "the join is told after the change that started before"));
+        told.countDown();
+        change.join(5000);
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, expectedResult), results.poll()));
     }
 
     @Test

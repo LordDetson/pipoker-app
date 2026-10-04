@@ -50,6 +50,9 @@ import lombok.extern.log4j.Log4j2;
  * the connection was lost: the person stays at the table for the grace period, and the browser can connect again
  * and return to the seat. When nobody returns in time, the person leaves the room as if they left it themselves.
  * <p>
+ * Every change of a person's place in the room holds their lock in {@link SeatLocks} until the room is told about it,
+ * so the others hear about the changes in the order they were made.
+ * <p>
  * Seats are kept in memory, which is enough for the single backend. After a restart nobody holds a seat yet,
  * so everyone in the stored rooms gets the startup grace period to return.
  */
@@ -58,6 +61,7 @@ import lombok.extern.log4j.Log4j2;
 public class RoomPresence {
 
     private final RoomService roomService;
+    private final SeatLocks seatLocks;
     private final ModelMapper modelMapper;
     private final SimpMessageSendingOperations messagingTemplate;
     private final RoomActivity activity;
@@ -72,11 +76,12 @@ public class RoomPresence {
     // Sessions whose page said it was being closed, until their connection closes
     private final Set<String> closingSessions = new HashSet<>();
 
-    public RoomPresence(RoomService roomService, ModelMapper modelMapper, SimpMessageSendingOperations messagingTemplate,
-            RoomActivity activity, @Qualifier("roomPresenceScheduler") TaskScheduler scheduler,
+    public RoomPresence(RoomService roomService, SeatLocks seatLocks, ModelMapper modelMapper,
+            SimpMessageSendingOperations messagingTemplate, RoomActivity activity, @Qualifier("roomPresenceScheduler") TaskScheduler scheduler,
             @Value("${presence.grace-period:10s}") Duration gracePeriod,
             @Value("${presence.startup-grace-period:30s}") Duration startupGracePeriod) {
         this.roomService = roomService;
+        this.seatLocks = seatLocks;
         this.modelMapper = modelMapper;
         this.messagingTemplate = messagingTemplate;
         this.activity = activity;
@@ -103,20 +108,23 @@ public class RoomPresence {
 
     /**
      * Returns the participant to their seat from a new session, if they haven't left the room yet. Someone who has
-     * stepped away comes back to the table with their vote.
+     * stepped away comes back to the table with their vote. A page that comes back while the person is being taken
+     * away from the table waits until everyone is told, and brings them back right after.
      *
      * @return the participant as stored in the room
      * @throws RoomServiceException if the participant is no longer in the room
      */
     public Participant returnTo(UUID roomId, String nickname, String sessionId) {
         SeatKey seatKey = new SeatKey(roomId, Participant.normalizeNickname(nickname));
+        return seatLocks.change(roomId, nickname, () -> returnToSeat(seatKey, nickname, sessionId));
+    }
+
+    private Participant returnToSeat(SeatKey seatKey, String nickname, String sessionId) {
+        UUID roomId = seatKey.roomId();
         Seat seat;
         Departure departure;
         synchronized(lock) {
             seat = seats.get(seatKey);
-            if(seat != null && seat.leaving) {
-                throw notInRoom(roomId, nickname);
-            }
             if(seat == null) {
                 // Someone stored in the room without a seat yet, for example right after a restart
                 seat = new Seat();
@@ -294,18 +302,23 @@ public class RoomPresence {
         seat.sessionIds.clear();
     }
 
-    // The leaving runs on the scheduler, outside the lock, also when it is due at once
+    // The leaving runs on the scheduler, outside the lock, also when it is due at once. It holds the person's seat lock,
+    // like every change of their place in the room.
     private void scheduleLeaving(SeatKey seatKey, Seat seat, Instant time, LeaveReason reason) {
         seat.cancelLeaving();
         int attempt = seat.leavingAttempt;
-        seat.scheduledLeaving = scheduler.schedule(() -> leave(seatKey, seat, attempt, reason), time);
+        seat.scheduledLeaving = scheduler.schedule(
+                () -> seatLocks.change(seatKey.roomId(), seatKey.nickname(), () -> leave(seatKey, seat, attempt, reason)),
+                time);
     }
 
     // Stepping away runs on the scheduler too, at once
     private void scheduleSteppingAway(SeatKey seatKey, Seat seat) {
         seat.cancelLeaving();
         int attempt = seat.leavingAttempt;
-        seat.scheduledLeaving = scheduler.schedule(() -> stepAway(seatKey, seat, attempt), Instant.now());
+        seat.scheduledLeaving = scheduler.schedule(
+                () -> seatLocks.change(seatKey.roomId(), seatKey.nickname(), () -> stepAway(seatKey, seat, attempt)),
+                Instant.now());
     }
 
     private void stepAway(SeatKey seatKey, Seat seat, int attempt) {
@@ -313,7 +326,7 @@ public class RoomPresence {
             if(seats.get(seatKey) != seat || seat.leavingAttempt != attempt || !seat.sessionIds.isEmpty()) {
                 return;
             }
-            // Nobody can return until everyone has been told that the person left the table
+            // The closed page can't take the person away a second time meanwhile
             seat.leaving = true;
         }
         UUID roomId = seatKey.roomId();
@@ -448,7 +461,7 @@ public class RoomPresence {
         private String closedSessionId;
         private ScheduledFuture<?> scheduledLeaving;
         private int leavingAttempt;
-        // The participant is being removed from the room, so it is too late to return
+        // The participant is being taken away from the table or removed from the room
         private boolean leaving;
         // Who stepped away from the table with what vote, while they may come back
         private Departure departure;
