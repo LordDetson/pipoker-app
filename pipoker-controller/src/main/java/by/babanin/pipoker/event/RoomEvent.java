@@ -30,7 +30,11 @@ public class RoomEvent {
         VOTE_ADDED,
         VOTE_REMOVED,
         CLEAR_VOTES,
-        SHOW_VOTES
+        SHOW_VOTES,
+        /**
+         * The room was closed because nobody did anything in it for long, and everyone left it.
+         */
+        ROOM_CLOSED
     }
 
     @NotNull

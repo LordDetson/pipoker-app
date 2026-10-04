@@ -26,6 +26,7 @@ import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
+import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
@@ -163,6 +164,7 @@ public class RoomController {
     @SendToUser(destinations = PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION, broadcast = false)
     ErrorEvent handleException(Exception exception,
             @Header(name = SimpMessageHeaderAccessor.DESTINATION_HEADER, required = false) String destination) {
-        return new ErrorEvent(destination, exception.getMessage());
+        ErrorEvent.Code code = exception instanceof RoomNotFoundException ? ErrorEvent.Code.ROOM_NOT_FOUND : null;
+        return new ErrorEvent(destination, exception.getMessage(), code);
     }
 }

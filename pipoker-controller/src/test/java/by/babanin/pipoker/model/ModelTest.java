@@ -111,8 +111,17 @@ class ModelTest {
     @Test
     @DisplayName("Error event JSON")
     void writeErrorEvent() throws Exception {
-        String json = objectMapper.writeValueAsString(new ErrorEvent("/app/room/create", "Deck can't be null"));
+        String json = objectMapper.writeValueAsString(new ErrorEvent("/app/room/create", "Deck can't be null", null));
 
         assertEquals("{\"destination\":\"/app/room/create\",\"message\":\"Deck can't be null\"}", json);
+    }
+
+    @Test
+    @DisplayName("Error event JSON of a missing room")
+    void writeRoomNotFoundErrorEvent() throws Exception {
+        String json = objectMapper.writeValueAsString(new ErrorEvent("/app/room/1", "Room \"1\" is not found",
+                ErrorEvent.Code.ROOM_NOT_FOUND));
+
+        assertEquals("{\"destination\":\"/app/room/1\",\"message\":\"Room \\\"1\\\" is not found\",\"code\":\"ROOM_NOT_FOUND\"}", json);
     }
 }

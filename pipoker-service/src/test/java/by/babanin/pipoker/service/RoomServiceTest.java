@@ -26,6 +26,7 @@ import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.exception.VoteServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
@@ -244,7 +245,7 @@ public class RoomServiceTest {
                 .thenReturn(Optional.empty());
 
         // When and then
-        assertThrows(RoomServiceException.class, () -> roomService.get(id));
+        assertThrows(RoomNotFoundException.class, () -> roomService.get(id));
     }
 
     @Test
@@ -398,7 +399,7 @@ public class RoomServiceTest {
         Mockito.when(roomRepository.existsById(roomId))
                 .thenReturn(false);
 
-        RoomServiceException exception = assertThrows(RoomServiceException.class,
+        RoomNotFoundException exception = assertThrows(RoomNotFoundException.class,
                 () -> roomService.addParticipant(roomId, "Dmitry"));
 
         assertEquals(String.format("Room \"%s\" is not found", roomId), exception.getMessage());

@@ -3,6 +3,7 @@ package by.babanin.pipoker.repository;
 import static org.springframework.data.mongodb.core.query.Criteria.where;
 import static org.springframework.data.mongodb.core.query.Query.query;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +24,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     private static final String PARTICIPANTS = "participants";
     private static final String VOTES = "votes";
     private static final String VOTES_SHOWN = "votesShown";
+    private static final String LAST_ACTIVITY = "lastActivity";
     private static final String PARTICIPANT_KEY = "key";
     private static final String VOTE_KEY = "participant.key";
 
@@ -37,7 +39,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
         // The condition on the nickname and the push are one update, so two people can't take the same nickname
         Query room = query(where("id").is(roomId)
                 .and(PARTICIPANTS + "." + PARTICIPANT_KEY).ne(participant.getKey()));
-        Update update = new Update().push(PARTICIPANTS, toDocument(participant));
+        Update update = new Update().push(PARTICIPANTS, toDocument(participant)).set(LAST_ACTIVITY, Instant.now());
         return mongoTemplate.updateFirst(room, update, Room.class).getModifiedCount() == 1;
     }
 
@@ -69,6 +71,18 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     }
 
     @Override
+    public Optional<Room> removeIfIdle(UUID roomId, Instant idleSince) {
+        Query idleRoom = query(where("id").is(roomId).and(LAST_ACTIVITY).lt(idleSince));
+        return Optional.ofNullable(mongoTemplate.findAndRemove(idleRoom, Room.class));
+    }
+
+    @Override
+    public long markActiveIfUnknown(Instant time) {
+        Query rooms = query(where(LAST_ACTIVITY).exists(false));
+        return mongoTemplate.updateMulti(rooms, new Update().set(LAST_ACTIVITY, time), Room.class).getModifiedCount();
+    }
+
+    @Override
     public boolean addVote(UUID roomId, Vote vote) {
         String key = vote.getParticipant().getKey();
         // The participant must still be a voter in the room at the moment of the update
@@ -79,27 +93,28 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
         Document otherVotes = new Document("$filter", new Document("input", new Document("$ifNull", List.of("$" + VOTES, List.of())))
                 .append("cond", new Document("$ne", List.of("$$this." + VOTE_KEY, new Document("$literal", key)))));
         Document votes = new Document("$concatArrays", List.of(otherVotes, new Document("$literal", List.of(toDocument(vote)))));
-        AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", new Document(VOTES, votes))));
+        AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", new Document(VOTES, votes)
+                .append(LAST_ACTIVITY, Instant.now()))));
         return mongoTemplate.updateFirst(room, update, Room.class).getMatchedCount() == 1;
     }
 
     @Override
     public Optional<Vote> removeVote(UUID roomId, String key) {
         Query room = query(where("id").is(roomId).and(VOTES + "." + VOTE_KEY).is(key));
-        Update update = new Update().pull(VOTES, new Document(VOTE_KEY, key));
+        Update update = new Update().pull(VOTES, new Document(VOTE_KEY, key)).set(LAST_ACTIVITY, Instant.now());
         return Optional.ofNullable(mongoTemplate.findAndModify(room, update, Room.class))
                 .flatMap(before -> before.findVote(key));
     }
 
     @Override
     public boolean showVotes(UUID roomId) {
-        Update update = new Update().set(VOTES_SHOWN, true);
+        Update update = new Update().set(VOTES_SHOWN, true).set(LAST_ACTIVITY, Instant.now());
         return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 
     @Override
     public boolean clearVotes(UUID roomId) {
-        Update update = new Update().set(VOTES, List.of()).set(VOTES_SHOWN, false);
+        Update update = new Update().set(VOTES, List.of()).set(VOTES_SHOWN, false).set(LAST_ACTIVITY, Instant.now());
         return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 

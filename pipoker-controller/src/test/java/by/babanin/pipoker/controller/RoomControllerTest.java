@@ -40,6 +40,7 @@ import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
+import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
@@ -354,7 +355,27 @@ class RoomControllerTest {
 
         // Then
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, errorMessage), results.poll()));
+                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, errorMessage, null), results.poll()));
+    }
+
+    @Test
+    void sendRoomNotFoundToUser() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        String errorMessage = String.format("Room \"%s\" is not found", roomId);
+        Mockito.when(roomService.addParticipant(roomId, "Dmitry"))
+                .thenThrow(new RoomNotFoundException(errorMessage));
+
+        // When
+        String destination = TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX
+                + String.format("/%s/participants/add", roomId);
+        Queue<ErrorEvent> results = buildUserSession(ErrorEvent.class, PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION)
+                .send(destination, new ParticipantDto("Dmitry", false));
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(new ErrorEvent(destination, errorMessage, ErrorEvent.Code.ROOM_NOT_FOUND),
+                        results.poll()));
     }
 
     private <T> TestStompSession<T> buildUserSession(Class<T> resultType, String destination)

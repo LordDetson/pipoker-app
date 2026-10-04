@@ -1,7 +1,11 @@
 package by.babanin.pipoker.service;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.springframework.data.mongodb.core.query.Criteria.where;
+import static org.springframework.data.mongodb.core.query.Query.query;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +27,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -386,6 +391,75 @@ class RoomServiceIT {
         assertTrue(roomService.remove(roomId).isPresent());
         assertTrue(roomService.find(roomId).isEmpty());
         assertTrue(roomService.remove(roomId).isEmpty());
+    }
+
+    @Test
+    @DisplayName("A room nobody acted in for the idle timeout is closed with everyone in it, an active one stays")
+    void closeIdleRooms() {
+        // Given
+        UUID idleRoomId = roomService.create("idle", deck("1")).getId();
+        roomService.addParticipant(idleRoomId, "Dmitry");
+        UUID activeRoomId = roomService.create("active", deck("1")).getId();
+        roomService.addParticipant(activeRoomId, "Alex");
+        setLastActivity(idleRoomId, Instant.now().minus(Duration.ofMinutes(31)));
+        setLastActivity(activeRoomId, Instant.now().minus(Duration.ofMinutes(31)));
+        roomService.addVote(activeRoomId, "Alex", "1");
+
+        // When
+        List<Room> closed = roomService.closeIdleRooms(Duration.ofMinutes(30));
+
+        // Then
+        assertEquals(List.of(idleRoomId), closed.stream().map(Room::getId).toList());
+        assertTrue(closed.get(0).containsParticipant("Dmitry"));
+        assertTrue(roomService.find(idleRoomId).isEmpty());
+        assertTrue(roomService.find(activeRoomId).isPresent());
+    }
+
+    @Test
+    @DisplayName("What people do in a room marks it active, stepping away and coming back doesn't")
+    void lastActivity() {
+        UUID roomId = roomService.create("test", deck("1")).getId();
+        assertMarksActive(roomId, () -> roomService.addParticipant(roomId, "Dmitry"));
+        assertMarksActive(roomId, () -> roomService.addVote(roomId, "Dmitry", "1"));
+        assertMarksActive(roomId, () -> roomService.removeVote(roomId, "Dmitry"));
+        assertMarksActive(roomId, () -> roomService.showVotes(roomId));
+        assertMarksActive(roomId, () -> roomService.clearVotes(roomId));
+
+        Instant past = Instant.now().minus(Duration.ofHours(1));
+        setLastActivity(roomId, past);
+        Departure departure = roomService.stepAway(roomId, "Dmitry").orElseThrow();
+        roomService.bringBack(roomId, departure);
+        assertEquals(past.toEpochMilli(), roomService.get(roomId).getLastActivity().toEpochMilli());
+    }
+
+    @Test
+    @DisplayName("Rooms stored before their last activity was kept count as active from the start of the backend")
+    void markActiveIfUnknown() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1")).getId();
+        mongoTemplate.updateFirst(query(where("id").is(roomId)), new Update().unset("lastActivity"), Room.class);
+
+        // Then
+        assertTrue(roomService.closeIdleRooms(Duration.ZERO).isEmpty());
+
+        // When
+        Instant start = Instant.now().minusMillis(1);
+        roomService.markActiveIfUnknown();
+
+        // Then
+        assertTrue(roomService.get(roomId).getLastActivity().isAfter(start));
+        assertEquals(List.of(roomId), roomService.closeIdleRooms(Duration.ZERO).stream().map(Room::getId).toList());
+    }
+
+    private void assertMarksActive(UUID roomId, Runnable action) {
+        setLastActivity(roomId, Instant.now().minus(Duration.ofHours(1)));
+        Instant before = Instant.now().minusMillis(1);
+        action.run();
+        assertTrue(roomService.get(roomId).getLastActivity().isAfter(before));
+    }
+
+    private void setLastActivity(UUID roomId, Instant time) {
+        mongoTemplate.updateFirst(query(where("id").is(roomId)), new Update().set("lastActivity", time), Room.class);
     }
 
     private static Deck deck(String... cardValues) {

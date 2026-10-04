@@ -1,5 +1,7 @@
 package by.babanin.pipoker.service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +17,7 @@ import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
 import by.babanin.pipoker.util.AppUtils;
@@ -80,6 +83,26 @@ public class RoomService {
         Optional<Room> room = find(id);
         room.ifPresent(roomRepository::delete);
         return room;
+    }
+
+    /**
+     * Closes the rooms nobody has done anything in for the given time: deletes them together with everyone still in them.
+     * A room someone acts in at the same moment is kept.
+     *
+     * @return the closed rooms as they were, with the people who were in them
+     */
+    public List<Room> closeIdleRooms(Duration idleTimeout) {
+        Instant idleSince = Instant.now().minus(idleTimeout);
+        return roomRepository.findByLastActivityBefore(idleSince).stream()
+                .flatMap(room -> roomRepository.removeIfIdle(room.getId(), idleSince).stream())
+                .toList();
+    }
+
+    /**
+     * Rooms stored before their last activity was kept count as active from now on, so they aren't closed at once.
+     */
+    public void markActiveIfUnknown() {
+        roomRepository.markActiveIfUnknown(Instant.now());
     }
 
     // Participants
@@ -195,7 +218,7 @@ public class RoomService {
         }
     }
 
-    private static RoomServiceException notFound(UUID roomId) {
-        return new RoomServiceException(String.format("Room \"%s\" is not found", roomId));
+    private static RoomNotFoundException notFound(UUID roomId) {
+        return new RoomNotFoundException(String.format("Room \"%s\" is not found", roomId));
     }
 }
