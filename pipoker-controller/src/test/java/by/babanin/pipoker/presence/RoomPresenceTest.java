@@ -1,6 +1,7 @@
 package by.babanin.pipoker.presence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -14,6 +15,7 @@ import static org.mockito.Mockito.when;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -43,6 +45,8 @@ class RoomPresenceTest {
 
     private static final Duration GRACE_PERIOD = Duration.ofSeconds(10);
     private static final Duration STARTUP_GRACE_PERIOD = Duration.ofSeconds(30);
+    private static final Duration LATER = Duration.ofMinutes(1);
+    private static final Duration MOMENT = Duration.ofMillis(100);
 
     private RoomService roomService;
     private SimpMessageSendingOperations messagingTemplate;
@@ -78,19 +82,49 @@ class RoomPresenceTest {
     }
 
     @Test
-    @DisplayName("Someone who lost the connection leaves the room after the grace period")
-    void leavesAfterGracePeriod() {
+    @DisplayName("Someone who closes the page leaves at once")
+    void leavesAfterClosingPage() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
         presence.hold(room.getId(), "Alex", "alex-tab");
 
-        presence.disconnected(disconnect("alex-tab"));
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(Duration.ZERO);
 
-        FakeScheduler.Task leaving = scheduler.single();
-        assertTrue(leaving.delay().compareTo(GRACE_PERIOD.minusSeconds(1)) > 0);
+        assertFalse(room.containsParticipant("Alex"));
+        verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
+                new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
+        // A refreshed page can't take the seat back either
+        assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
+    }
+
+    @Test
+    @DisplayName("Someone whose page says it is closed after the connection closes leaves at once")
+    void pageClosedAfterConnectionClosed() {
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.NORMAL));
+        scheduler.advance(MOMENT);
         assertTrue(room.containsParticipant("Alex"));
 
-        leaving.run();
+        presence.pageClosed("alex-tab");
+        scheduler.advance(Duration.ZERO);
 
-        assertTrue(room.findParticipant("Alex").isEmpty());
+        assertFalse(room.containsParticipant("Alex"));
+    }
+
+    @Test
+    @DisplayName("Someone whose connection is lost leaves after the grace period")
+    void leavesAfterLosingConnection() {
+        presence.hold(room.getId(), "Alex", "alex-tab");
+
+        // A clean close too: the browser closes the connection itself when its heart-beat check fails, and the close
+        // reaches the server when the internet is back
+        presence.disconnected(disconnect("alex-tab", CloseStatus.NORMAL));
+
+        scheduler.advance(GRACE_PERIOD.minus(MOMENT));
+        assertTrue(room.containsParticipant("Alex"));
+        scheduler.advance(MOMENT);
+        assertFalse(room.containsParticipant("Alex"));
         verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
                 new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
     }
@@ -99,22 +133,20 @@ class RoomPresenceTest {
     @DisplayName("Someone who comes back in time keeps the seat")
     void returnsInTime() {
         presence.hold(room.getId(), "Alex", "alex-tab");
-        presence.disconnected(disconnect("alex-tab"));
-        FakeScheduler.Task leaving = scheduler.single();
+        presence.disconnected(disconnect("alex-tab", CloseStatus.NO_CLOSE_FRAME));
+        scheduler.advance(GRACE_PERIOD.minus(MOMENT));
 
         Participant returned = presence.returnTo(room.getId(), "alex", "alex-tab-after-refresh");
 
         assertEquals("Alex", returned.getNickname());
-        assertTrue(leaving.future().isCancelled());
-        // Even if the cancelled task runs, nobody leaves
-        leaving.run();
+        scheduler.advance(LATER);
         assertTrue(room.containsParticipant("Alex"));
         verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
 
         // The new connection holds the seat now
-        presence.disconnected(disconnect("alex-tab-after-refresh"));
-        scheduler.last().run();
-        assertTrue(room.findParticipant("Alex").isEmpty());
+        presence.disconnected(disconnect("alex-tab-after-refresh", CloseStatus.NO_CLOSE_FRAME));
+        scheduler.advance(LATER);
+        assertFalse(room.containsParticipant("Alex"));
     }
 
     @Test
@@ -123,14 +155,15 @@ class RoomPresenceTest {
         presence.hold(room.getId(), "Alex", "first-tab");
         presence.returnTo(room.getId(), "Alex", "second-tab");
 
-        presence.disconnected(disconnect("first-tab"));
+        presence.pageClosed("first-tab");
+        presence.disconnected(disconnect("first-tab", CloseStatus.NORMAL));
 
         assertTrue(scheduler.tasks.isEmpty());
 
-        presence.disconnected(disconnect("second-tab"));
+        presence.disconnected(disconnect("second-tab", CloseStatus.NO_CLOSE_FRAME));
 
-        scheduler.single().run();
-        assertTrue(room.findParticipant("Alex").isEmpty());
+        scheduler.advance(LATER);
+        assertFalse(room.containsParticipant("Alex"));
     }
 
     @Test
@@ -139,9 +172,21 @@ class RoomPresenceTest {
         presence.hold(room.getId(), "Alex", "alex-tab");
 
         presence.forget(room.getId(), "Alex");
-        presence.disconnected(disconnect("alex-tab"));
+        presence.disconnected(disconnect("alex-tab", CloseStatus.NORMAL));
 
         assertTrue(scheduler.tasks.isEmpty());
+    }
+
+    @Test
+    @DisplayName("Nobody is removed again after leaving the room on purpose while the seat waits")
+    void leftOnPurposeWhileSeatWaits() {
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.NO_CLOSE_FRAME));
+
+        presence.forget(room.getId(), "Alex");
+        scheduler.advance(LATER);
+
+        verify(roomService, never()).removeParticipant(any(), anyString());
     }
 
     @Test
@@ -151,7 +196,7 @@ class RoomPresenceTest {
         presence.forget(room.getId(), "Alex");
         presence.hold(room.getId(), "Alex", "second-alex");
 
-        presence.disconnected(disconnect("first-alex"));
+        presence.disconnected(disconnect("first-alex", CloseStatus.NO_CLOSE_FRAME));
 
         assertTrue(scheduler.tasks.isEmpty());
     }
@@ -160,8 +205,8 @@ class RoomPresenceTest {
     @DisplayName("It's too late to come back after leaving the room")
     void returnAfterLeaving() {
         presence.hold(room.getId(), "Alex", "alex-tab");
-        presence.disconnected(disconnect("alex-tab"));
-        scheduler.single().run();
+        presence.disconnected(disconnect("alex-tab", CloseStatus.NO_CLOSE_FRAME));
+        scheduler.advance(LATER);
 
         assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-later"));
     }
@@ -173,7 +218,7 @@ class RoomPresenceTest {
         assertThrows(RoomServiceException.class, () -> presence.returnTo(UUID.randomUUID(), "Alex", "some-tab"));
 
         // The failed attempts hold no seat
-        presence.disconnected(disconnect("some-tab"));
+        presence.disconnected(disconnect("some-tab", CloseStatus.NORMAL));
         assertTrue(scheduler.tasks.isEmpty());
     }
 
@@ -183,9 +228,9 @@ class RoomPresenceTest {
         presence.hold(room.getId(), "Dmitry", "dmitry-tab");
         presence.hold(room.getId(), "Alex", "alex-tab");
 
-        presence.disconnected(disconnect("dmitry-tab"));
-        presence.disconnected(disconnect("alex-tab"));
-        scheduler.tasks.forEach(FakeScheduler.Task::run);
+        presence.disconnected(disconnect("dmitry-tab", CloseStatus.NO_CLOSE_FRAME));
+        presence.disconnected(disconnect("alex-tab", CloseStatus.NO_CLOSE_FRAME));
+        scheduler.advance(LATER);
 
         verify(roomService).removeParticipant(room.getId(), "dmitry");
         verify(roomService).removeParticipant(room.getId(), "alex");
@@ -196,10 +241,10 @@ class RoomPresenceTest {
     @DisplayName("A room that is already gone is not a problem")
     void roomAlreadyGone() {
         presence.hold(room.getId(), "Alex", "alex-tab");
-        presence.disconnected(disconnect("alex-tab"));
+        presence.disconnected(disconnect("alex-tab", CloseStatus.NO_CLOSE_FRAME));
         when(roomService.removeParticipant(room.getId(), "alex")).thenThrow(new RoomServiceException("Room is not found"));
 
-        scheduler.single().run();
+        scheduler.advance(LATER);
 
         verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
     }
@@ -212,13 +257,13 @@ class RoomPresenceTest {
         presence.waitForReturns();
 
         assertEquals(2, scheduler.tasks.size());
-        assertTrue(scheduler.tasks.stream().allMatch(task -> task.delay().compareTo(GRACE_PERIOD) > 0));
+        assertTrue(scheduler.tasks.stream().allMatch(task -> task.time().compareTo(GRACE_PERIOD) > 0));
 
         presence.returnTo(room.getId(), "Dmitry", "dmitry-tab");
-        scheduler.tasks.forEach(FakeScheduler.Task::run);
+        scheduler.advance(LATER);
 
         assertTrue(room.containsParticipant("Dmitry"));
-        assertTrue(room.findParticipant("Alex").isEmpty());
+        assertFalse(room.containsParticipant("Alex"));
     }
 
     @Test
@@ -230,37 +275,47 @@ class RoomPresenceTest {
         presence.waitForReturns();
 
         assertEquals(1, scheduler.tasks.size());
-        scheduler.single().run();
+        scheduler.advance(LATER);
         assertTrue(room.containsParticipant("Dmitry"));
-        assertTrue(room.findParticipant("Alex").isEmpty());
+        assertFalse(room.containsParticipant("Alex"));
     }
 
-    private static SessionDisconnectEvent disconnect(String sessionId) {
+    private static SessionDisconnectEvent disconnect(String sessionId, CloseStatus closeStatus) {
         Message<byte[]> message = MessageBuilder.withPayload(new byte[0]).build();
-        return new SessionDisconnectEvent(RoomPresenceTest.class, message, sessionId, CloseStatus.NORMAL);
+        return new SessionDisconnectEvent(RoomPresenceTest.class, message, sessionId, closeStatus);
     }
 
     /**
-     * Collects scheduled tasks, so a test decides when the grace period is over.
+     * Collects scheduled tasks and runs them when a test moves the clock past their time.
      */
     private static final class FakeScheduler implements TaskScheduler {
 
         private final List<Task> tasks = new ArrayList<>();
+        // The time the test has moved on since it started
+        private Duration now = Duration.ZERO;
 
-        record Task(Runnable runnable, Duration delay, ScheduledFuture<?> future) {
+        record Task(Runnable runnable, Duration time, ScheduledFuture<?> future) {
+        }
 
-            void run() {
-                runnable.run();
+        void advance(Duration duration) {
+            Duration end = now.plus(duration);
+            Optional<Task> next = nextTask(end);
+            while(next.isPresent()) {
+                Task task = next.get();
+                tasks.remove(task);
+                if(task.time().compareTo(now) > 0) {
+                    now = task.time();
+                }
+                task.runnable().run();
+                next = nextTask(end);
             }
+            now = end;
         }
 
-        Task single() {
-            assertEquals(1, tasks.size());
-            return tasks.get(0);
-        }
-
-        Task last() {
-            return tasks.get(tasks.size() - 1);
+        private Optional<Task> nextTask(Duration end) {
+            return tasks.stream()
+                    .filter(task -> !task.future().isCancelled() && task.time().compareTo(end) <= 0)
+                    .min(Comparator.comparing(Task::time));
         }
 
         @Override
@@ -270,7 +325,7 @@ class RoomPresenceTest {
                 when(future.isCancelled()).thenReturn(true);
                 return true;
             });
-            tasks.add(new Task(task, Duration.between(Instant.now(), startTime), future));
+            tasks.add(new Task(task, now.plus(Duration.between(Instant.now(), startTime)), future));
             return future;
         }
 

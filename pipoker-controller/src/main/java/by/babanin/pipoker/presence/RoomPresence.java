@@ -31,12 +31,13 @@ import by.babanin.pipoker.service.RoomService;
 import lombok.extern.log4j.Log4j2;
 
 /**
- * Keeps people at the table while their connection is lost for a moment.
+ * Keeps people at the table while their connection is lost for a moment, and lets them go as soon as they close the page.
  * <p>
- * Everyone who creates or joins a room holds their seat with their STOMP session. When the last session holding
- * a seat is closed, the seat waits for the grace period: after a page refresh or a short network drop the browser
- * connects again and returns to the seat with {@link #returnTo}. When nobody returns in time, the person leaves
- * the room as if they left it themselves, so nobody stays at the table after closing the tab.
+ * Everyone who creates or joins a room holds their seat with their STOMP session. A page that is being closed or
+ * refreshed says so with {@link #pageClosed} right before its connection closes, and the person leaves the room
+ * as soon as nobody holds the seat. When the last session holding a seat closes without saying so, the connection
+ * was lost: the seat waits for the grace period, and the browser can connect again and return to it with
+ * {@link #returnTo}. When nobody returns in time, the person leaves the room as if they left it themselves.
  * <p>
  * Seats are kept in memory, which is enough for the single backend. After a restart nobody holds a seat yet,
  * so everyone in the stored rooms gets the startup grace period to return.
@@ -52,10 +53,12 @@ public class RoomPresence {
     private final Duration gracePeriod;
     private final Duration startupGracePeriod;
 
-    // Both maps are guarded by this lock
+    // The collections are guarded by this lock
     private final Object lock = new Object();
     private final Map<SeatKey, Seat> seats = new HashMap<>();
     private final Map<String, Set<SeatKey>> sessionSeats = new HashMap<>();
+    // Sessions whose page said it was being closed, until their connection closes
+    private final Set<String> closingSessions = new HashSet<>();
 
     public RoomPresence(RoomService roomService, ModelMapper modelMapper, SimpMessageSendingOperations messagingTemplate,
             @Qualifier("roomPresenceScheduler") TaskScheduler scheduler,
@@ -133,17 +136,46 @@ public class RoomPresence {
         }
     }
 
+    /**
+     * The page of this session is being closed or refreshed, and its connection is about to close.
+     * <p>
+     * The frames of a connection are handled one after another, so this can come after the connection is closed,
+     * when a previous frame took longer. Then the seats that the session has just left wait for the grace period
+     * already, and the person leaves now.
+     */
+    public void pageClosed(String sessionId) {
+        synchronized(lock) {
+            if(sessionSeats.containsKey(sessionId)) {
+                closingSessions.add(sessionId);
+                return;
+            }
+            seats.forEach((seatKey, seat) -> {
+                if(sessionId.equals(seat.closedSessionId) && seat.sessionIds.isEmpty() && !seat.leaving) {
+                    scheduleLeaving(seatKey, seat, Instant.now(), "closing the page");
+                }
+            });
+        }
+    }
+
     @EventListener
     public void disconnected(SessionDisconnectEvent event) {
+        String sessionId = event.getSessionId();
         synchronized(lock) {
-            Set<SeatKey> heldSeats = sessionSeats.remove(event.getSessionId());
+            boolean pageClosed = closingSessions.remove(sessionId);
+            Set<SeatKey> heldSeats = sessionSeats.remove(sessionId);
             if(heldSeats == null) {
                 return;
             }
             heldSeats.forEach(seatKey -> {
                 Seat seat = seats.get(seatKey);
-                if(seat != null && seat.sessionIds.remove(event.getSessionId()) && seat.sessionIds.isEmpty()) {
-                    scheduleLeaving(seatKey, seat, gracePeriod);
+                if(seat != null && seat.sessionIds.remove(sessionId) && seat.sessionIds.isEmpty()) {
+                    if(pageClosed) {
+                        scheduleLeaving(seatKey, seat, Instant.now(), "closing the page");
+                    }
+                    else {
+                        scheduleLeaving(seatKey, seat, Instant.now().plus(gracePeriod), "losing the connection");
+                    }
+                    seat.closedSessionId = sessionId;
                 }
             });
         }
@@ -158,7 +190,7 @@ public class RoomPresence {
                     if(!seats.containsKey(seatKey)) {
                         Seat seat = new Seat();
                         seats.put(seatKey, seat);
-                        scheduleLeaving(seatKey, seat, startupGracePeriod);
+                        scheduleLeaving(seatKey, seat, Instant.now().plus(startupGracePeriod), "the restart");
                     }
                 }
             }
@@ -167,6 +199,7 @@ public class RoomPresence {
 
     private void take(SeatKey seatKey, Seat seat, String sessionId) {
         seat.cancelLeaving();
+        seat.closedSessionId = null;
         seat.sessionIds.add(sessionId);
         sessionSeats.computeIfAbsent(sessionId, id -> new HashSet<>()).add(seatKey);
     }
@@ -182,13 +215,14 @@ public class RoomPresence {
         seat.sessionIds.clear();
     }
 
-    private void scheduleLeaving(SeatKey seatKey, Seat seat, Duration delay) {
+    // The leaving runs on the scheduler, outside the lock, also when it is due at once
+    private void scheduleLeaving(SeatKey seatKey, Seat seat, Instant time, String reason) {
         seat.cancelLeaving();
         int attempt = seat.leavingAttempt;
-        seat.scheduledLeaving = scheduler.schedule(() -> leave(seatKey, seat, attempt), Instant.now().plus(delay));
+        seat.scheduledLeaving = scheduler.schedule(() -> leave(seatKey, seat, attempt, reason), time);
     }
 
-    private void leave(SeatKey seatKey, Seat seat, int attempt) {
+    private void leave(SeatKey seatKey, Seat seat, int attempt, String reason) {
         synchronized(lock) {
             if(seats.get(seatKey) != seat || seat.leavingAttempt != attempt || !seat.sessionIds.isEmpty()) {
                 return;
@@ -197,7 +231,7 @@ public class RoomPresence {
         }
         try {
             roomService.removeParticipant(seatKey.roomId(), seatKey.nickname()).ifPresent(participant -> {
-                log.info("{} left the room {} after losing the connection", participant.getNickname(), seatKey.roomId());
+                log.info("{} left the room {} after {}", participant.getNickname(), seatKey.roomId(), reason);
                 ParticipantDto removed = modelMapper.map(participant, ParticipantDto.class);
                 messagingTemplate.convertAndSend(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + "." + seatKey.roomId(),
                         new RoomEvent(seatKey.roomId(), EventType.PARTICIPANT_REMOVED, removed));
@@ -224,6 +258,8 @@ public class RoomPresence {
     private static final class Seat {
 
         private final Set<String> sessionIds = new HashSet<>();
+        // The session whose connection closed last and left the seat empty
+        private String closedSessionId;
         private ScheduledFuture<?> scheduledLeaving;
         private int leavingAttempt;
         // The participant is being removed from the room, so it is too late to return
