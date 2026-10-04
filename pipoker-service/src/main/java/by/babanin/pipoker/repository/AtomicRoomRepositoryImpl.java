@@ -125,6 +125,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
         AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", new Document(HISTORY,
                 new Document("$cond", List.of(notRecorded, history, recorded)))
                 .append(VOTES_SHOWN, true)
+                .append(TIMER, "$$REMOVE")
                 .append(LAST_ACTIVITY, Instant.now()))));
         // Returns the room as it was before the update, which tells whether this update recorded the round
         return Optional.ofNullable(mongoTemplate.findAndModify(query(where("id").is(roomId)), update, Room.class));
@@ -139,8 +140,9 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
 
     @Override
     public boolean startTimer(UUID roomId, Timer timer) {
+        Query room = query(where("id").is(roomId).and(VOTES_SHOWN).ne(true));
         Update update = new Update().set(TIMER, toDocument(timer)).set(LAST_ACTIVITY, Instant.now());
-        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
+        return mongoTemplate.updateFirst(room, update, Room.class).getMatchedCount() == 1;
     }
 
     @Override

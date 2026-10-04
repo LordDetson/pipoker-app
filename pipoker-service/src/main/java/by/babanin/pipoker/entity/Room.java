@@ -216,6 +216,8 @@ public class Room {
             }
         });
         votesShown = true;
+        // The discussion ends when the cards are revealed, so its timer stops
+        timer = null;
         return round;
     }
 

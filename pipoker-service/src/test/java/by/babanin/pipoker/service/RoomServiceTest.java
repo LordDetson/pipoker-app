@@ -34,6 +34,7 @@ import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.InvalidDataException;
 import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
@@ -724,6 +725,20 @@ public class RoomServiceTest {
         assertThrows(InvalidDataException.class, () -> roomService.startTimer(roomId, Duration.ofMinutes(30).plusSeconds(1)));
         assertThrows(InvalidDataException.class, () -> roomService.startTimer(roomId, Duration.ofSeconds(-60)));
         Mockito.verify(roomRepository, Mockito.times(2)).startTimer(ArgumentMatchers.eq(roomId), ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("The timer doesn't start once the cards are revealed")
+    void timerAfterReveal() {
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomRepository.startTimer(ArgumentMatchers.eq(roomId), ArgumentMatchers.any(Timer.class)))
+                .thenReturn(false);
+        Mockito.when(roomRepository.existsById(roomId))
+                .thenReturn(true);
+
+        RoomServiceException exception = assertThrows(RoomServiceException.class,
+                () -> roomService.startTimer(roomId, Duration.ofMinutes(1)));
+        assertEquals(ErrorCode.CARDS_REVEALED, exception.getCode());
     }
 
     @Test

@@ -32,6 +32,11 @@ public enum ErrorCode {
     CARD_NOT_IN_DECK,
 
     /**
+     * The cards of the round are revealed, so its discussion timer can't start: the next round can have one.
+     */
+    CARDS_REVEALED,
+
+    /**
      * The request breaks a limit the client checks too, such as the length of a nickname or the size of a deck.
      */
     INVALID_DATA,
