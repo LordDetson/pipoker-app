@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import by.babanin.pipoker.entity.Participant;
-import by.babanin.pipoker.exception.RoomServiceException;
+import by.babanin.pipoker.exception.InvalidDataException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Path;
 import jakarta.validation.Validation;
@@ -32,7 +32,7 @@ class AppUtilsTest {
         AtomicBoolean called = new AtomicBoolean();
 
         assertDoesNotThrow(() -> AppUtils.validateAndThrow(validator, Participant.createParticipant("Dmitry"),
-                RoomServiceException::new, () -> called.set(true)));
+                InvalidDataException::new, () -> called.set(true)));
         assertFalse(called.get());
     }
 
@@ -41,8 +41,8 @@ class AppUtilsTest {
     void invalidObject() {
         Participant participant = Participant.createParticipant("a");
 
-        RoomServiceException exception = assertThrows(RoomServiceException.class,
-                () -> AppUtils.validateAndThrow(validator, participant, RoomServiceException::new));
+        InvalidDataException exception = assertThrows(InvalidDataException.class,
+                () -> AppUtils.validateAndThrow(validator, participant, InvalidDataException::new));
 
         assertEquals("Participant#nickname - size must be between 2 and 32", exception.getMessage());
     }
@@ -52,15 +52,15 @@ class AppUtilsTest {
     void rollbackBeforeThrow() {
         AtomicBoolean called = new AtomicBoolean();
 
-        assertThrows(RoomServiceException.class, () -> AppUtils.validateAndThrow(validator,
-                Participant.createParticipant("a"), RoomServiceException::new, () -> called.set(true)));
+        assertThrows(InvalidDataException.class, () -> AppUtils.validateAndThrow(validator,
+                Participant.createParticipant("a"), InvalidDataException::new, () -> called.set(true)));
         assertTrue(called.get());
     }
 
     @Test
     @DisplayName("No violations, no exception")
     void noViolations() {
-        assertDoesNotThrow(() -> AppUtils.throwException(List.of(), RoomServiceException::new));
+        assertDoesNotThrow(() -> AppUtils.throwException(List.of(), InvalidDataException::new));
     }
 
     @Test
@@ -74,8 +74,8 @@ class AppUtilsTest {
         Mockito.when(path.toString()).thenReturn("");
         Mockito.when(violation.getMessage()).thenReturn("");
 
-        RoomServiceException exception = assertThrows(RoomServiceException.class,
-                () -> AppUtils.throwException(List.of(violation), RoomServiceException::new));
+        InvalidDataException exception = assertThrows(InvalidDataException.class,
+                () -> AppUtils.throwException(List.of(violation), InvalidDataException::new));
 
         assertEquals("Object# - ", exception.getMessage());
     }
