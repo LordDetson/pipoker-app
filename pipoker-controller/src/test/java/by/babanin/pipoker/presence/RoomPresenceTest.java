@@ -7,8 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,6 +27,7 @@ import java.util.concurrent.ScheduledFuture;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.modelmapper.ModelMapper;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.SimpMessageSendingOperations;
@@ -37,10 +41,13 @@ import by.babanin.pipoker.activity.RoomActivity;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
+import by.babanin.pipoker.model.VoteDto;
+import by.babanin.pipoker.service.Departure;
 import by.babanin.pipoker.service.RoomService;
 
 class RoomPresenceTest {
@@ -68,6 +75,10 @@ class RoomPresenceTest {
             Participant participant = invocation.getArgument(0);
             return new ParticipantDto(participant.getNickname(), participant.isWatcher());
         });
+        when(modelMapper.map(any(Vote.class), eq(VoteDto.class))).thenAnswer(invocation -> {
+            Vote vote = invocation.getArgument(0);
+            return new VoteDto(vote.getParticipant().getNickname(), vote.getCard().getValue());
+        });
         presence = new RoomPresence(roomService, modelMapper, messagingTemplate, activity, scheduler, GRACE_PERIOD, STARTUP_GRACE_PERIOD);
 
         Deck deck = new Deck();
@@ -83,28 +94,150 @@ class RoomPresenceTest {
             }
             return removed;
         });
+        when(roomService.stepAway(eq(room.getId()), anyString())).thenAnswer(invocation -> {
+            String nickname = invocation.getArgument(1);
+            Vote vote = room.findVote(nickname).orElse(null);
+            return room.removeParticipant(nickname).map(participant -> new Departure(participant, vote));
+        });
+        when(roomService.bringBack(eq(room.getId()), any(Departure.class))).thenAnswer(invocation -> {
+            Departure departure = invocation.getArgument(1);
+            String nickname = departure.participant().getNickname();
+            if(room.containsParticipant(nickname)) {
+                return false;
+            }
+            if(departure.participant().isWatcher()) {
+                room.addWatcher(nickname);
+            }
+            else {
+                room.addParticipant(nickname);
+            }
+            if(departure.vote() != null) {
+                room.addVote(nickname, departure.vote().getCard().getValue());
+            }
+            return true;
+        });
+        doAnswer(invocation -> {
+            if(!room.haveParticipants()) {
+                when(roomService.find(room.getId())).thenReturn(Optional.empty());
+            }
+            return null;
+        }).when(roomService).removeIfEmpty(room.getId());
     }
 
     @Test
-    @DisplayName("Someone who closes the page leaves at once")
+    @DisplayName("Someone who closes the page leaves the table at once")
     void leavesAfterClosingPage() {
         presence.hold(room.getId(), "Dmitry", "dmitry-tab");
         presence.hold(room.getId(), "Alex", "alex-tab");
+        room.addVote("Alex", "1");
 
         presence.pageClosed("alex-tab");
         presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
         scheduler.advance(Duration.ZERO);
 
         assertFalse(room.containsParticipant("Alex"));
+        assertTrue(room.getVotes().isEmpty());
         verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
                 new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
+        // The leaving counts once it is too late to come back
+        verify(activity, never()).left(any());
+        scheduler.advance(GRACE_PERIOD);
         verify(activity).left(LeaveReason.PAGE_CLOSED);
-        // A refreshed page can't take the seat back either
+        verify(messagingTemplate, times(1)).convertAndSend(anyString(), any(Object.class));
         assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
     }
 
     @Test
-    @DisplayName("Someone whose page says it is closed after the connection closes leaves at once")
+    @DisplayName("Someone who refreshes the page comes back to the table with their vote")
+    void refreshesPage() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        room.addVote("Alex", "1");
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(GRACE_PERIOD.minus(MOMENT));
+
+        Participant returned = presence.returnTo(room.getId(), "alex", "alex-tab-after-refresh");
+
+        assertEquals("Alex", returned.getNickname());
+        assertTrue(room.containsParticipant("Alex"));
+        assertEquals("1", room.getVote("Alex").getCard().getValue());
+        String topic = "/topic/room." + room.getId();
+        InOrder told = inOrder(messagingTemplate);
+        told.verify(messagingTemplate).convertAndSend(topic,
+                new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
+        told.verify(messagingTemplate).convertAndSend(topic,
+                new RoomEvent(room.getId(), EventType.PARTICIPANT_ADDED, new ParticipantDto("Alex", false)));
+        told.verify(messagingTemplate).convertAndSend(topic,
+                new RoomEvent(room.getId(), EventType.VOTE_ADDED, new VoteDto("Alex", "1")));
+        scheduler.advance(LATER);
+        assertTrue(room.containsParticipant("Alex"));
+        verify(activity, never()).left(any());
+    }
+
+    @Test
+    @DisplayName("Someone who refreshes the page after a new round started comes back without the old vote")
+    void refreshesPageAfterNewRound() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        room.addVote("Alex", "1");
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(Duration.ZERO);
+
+        room.clearVotes();
+        presence.votesCleared(room.getId());
+        presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh");
+
+        assertTrue(room.containsParticipant("Alex"));
+        assertTrue(room.findVote("Alex").isEmpty());
+        verify(messagingTemplate, never()).convertAndSend(anyString(),
+                eq(new RoomEvent(room.getId(), EventType.VOTE_ADDED, new VoteDto("Alex", "1"))));
+    }
+
+    @Test
+    @DisplayName("A refreshed page doesn't bring back someone whose nickname was taken meanwhile")
+    void nicknameTakenWhileAway() {
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(Duration.ZERO);
+        room.addWatcher("alex");
+
+        assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
+
+        assertTrue(room.getParticipant("Alex").isWatcher());
+        verify(activity).left(LeaveReason.PAGE_CLOSED);
+        // The failed attempt holds no seat
+        presence.disconnected(disconnect("alex-tab-after-refresh", CloseStatus.NORMAL));
+        scheduler.advance(LATER);
+        assertTrue(room.containsParticipant("Alex"));
+        verify(activity, times(1)).left(any());
+    }
+
+    @Test
+    @DisplayName("The room waits for the last people who closed the page, and is deleted when they don't come back")
+    void lastPeopleCloseThePage() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "alex-tab");
+
+        presence.pageClosed("dmitry-tab");
+        presence.disconnected(disconnect("dmitry-tab", CloseStatus.GOING_AWAY));
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(Duration.ZERO);
+
+        assertFalse(room.haveParticipants());
+        assertTrue(roomService.find(room.getId()).isPresent());
+        verify(roomService, never()).removeIfEmpty(any());
+
+        scheduler.advance(GRACE_PERIOD);
+
+        assertTrue(roomService.find(room.getId()).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Someone whose page says it is closed after the connection closes leaves the table at once")
     void pageClosedAfterConnectionClosed() {
         presence.hold(room.getId(), "Alex", "alex-tab");
         presence.disconnected(disconnect("alex-tab", CloseStatus.NORMAL));

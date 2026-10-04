@@ -29,17 +29,22 @@ import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
+import by.babanin.pipoker.model.VoteDto;
+import by.babanin.pipoker.service.Departure;
 import by.babanin.pipoker.service.RoomService;
 import lombok.extern.log4j.Log4j2;
 
 /**
- * Keeps people at the table while their connection is lost for a moment, and lets them go as soon as they close the page.
+ * Keeps people at the table while their connection is lost for a moment or their page is refreshed, and lets them go
+ * as soon as they close the page.
  * <p>
  * Everyone who creates or joins a room holds their seat with their STOMP session. A page that is being closed or
- * refreshed says so with {@link #pageClosed} right before its connection closes, and the person leaves the room
- * as soon as nobody holds the seat. When the last session holding a seat closes without saying so, the connection
- * was lost: the seat waits for the grace period, and the browser can connect again and return to it with
- * {@link #returnTo}. When nobody returns in time, the person leaves the room as if they left it themselves.
+ * refreshed says so with {@link #pageClosed} right before its connection closes. The server can't tell a refresh from
+ * a close, so as soon as nobody holds the seat the person steps away: they leave the table with their vote, and the
+ * seat remembers both for the grace period. A refreshed page brings them back with {@link #returnTo}, and everyone
+ * sees them at the table again with the vote. When the last session holding a seat closes without saying so,
+ * the connection was lost: the person stays at the table for the grace period, and the browser can connect again
+ * and return to the seat. When nobody returns in time, the person leaves the room as if they left it themselves.
  * <p>
  * Seats are kept in memory, which is enough for the single backend. After a restart nobody holds a seat yet,
  * so everyone in the stored rooms gets the startup grace period to return.
@@ -93,7 +98,8 @@ public class RoomPresence {
     }
 
     /**
-     * Returns the participant to their seat from a new session, if they haven't left the room yet.
+     * Returns the participant to their seat from a new session, if they haven't left the room yet. Someone who has
+     * stepped away comes back to the table with their vote.
      *
      * @return the participant as stored in the room
      * @throws RoomServiceException if the participant is no longer in the room
@@ -101,6 +107,7 @@ public class RoomPresence {
     public Participant returnTo(UUID roomId, String nickname, String sessionId) {
         SeatKey seatKey = new SeatKey(roomId, Participant.normalizeNickname(nickname));
         Seat seat;
+        Departure departure;
         synchronized(lock) {
             seat = seats.get(seatKey);
             if(seat != null && seat.leaving) {
@@ -111,7 +118,12 @@ public class RoomPresence {
                 seat = new Seat();
                 seats.put(seatKey, seat);
             }
+            departure = seat.departure;
+            seat.departure = null;
             take(seatKey, seat, sessionId);
+        }
+        if(departure != null) {
+            return bringBack(seatKey, seat, departure);
         }
         // The seat is taken first, so the participant can't leave between this check and the answer
         Optional<Participant> participant = roomService.find(roomId)
@@ -145,7 +157,7 @@ public class RoomPresence {
      * <p>
      * The frames of a connection are handled one after another, so this can come after the connection is closed,
      * when a previous frame took longer. Then the seats that the session has just left wait for the grace period
-     * already, and the person leaves now.
+     * already, and the person steps away now.
      */
     public void pageClosed(String sessionId) {
         synchronized(lock) {
@@ -154,8 +166,22 @@ public class RoomPresence {
                 return;
             }
             seats.forEach((seatKey, seat) -> {
-                if(sessionId.equals(seat.closedSessionId) && seat.sessionIds.isEmpty() && !seat.leaving) {
-                    scheduleLeaving(seatKey, seat, Instant.now(), LeaveReason.PAGE_CLOSED);
+                if(sessionId.equals(seat.closedSessionId) && seat.sessionIds.isEmpty() && !seat.leaving
+                        && seat.departure == null) {
+                    scheduleSteppingAway(seatKey, seat);
+                }
+            });
+        }
+    }
+
+    /**
+     * A new round starts in the room, so whoever stepped away comes back without the vote of the previous round.
+     */
+    public void votesCleared(UUID roomId) {
+        synchronized(lock) {
+            seats.forEach((seatKey, seat) -> {
+                if(seat.departure != null && seatKey.roomId().equals(roomId)) {
+                    seat.departure = seat.departure.withoutVote();
                 }
             });
         }
@@ -185,7 +211,7 @@ public class RoomPresence {
                 Seat seat = seats.get(seatKey);
                 if(seat != null && seat.sessionIds.remove(sessionId) && seat.sessionIds.isEmpty()) {
                     if(pageClosed) {
-                        scheduleLeaving(seatKey, seat, Instant.now(), LeaveReason.PAGE_CLOSED);
+                        scheduleSteppingAway(seatKey, seat);
                     }
                     else {
                         scheduleLeaving(seatKey, seat, Instant.now().plus(gracePeriod), LeaveReason.CONNECTION_LOST);
@@ -237,6 +263,105 @@ public class RoomPresence {
         seat.scheduledLeaving = scheduler.schedule(() -> leave(seatKey, seat, attempt, reason), time);
     }
 
+    // Stepping away runs on the scheduler too, at once
+    private void scheduleSteppingAway(SeatKey seatKey, Seat seat) {
+        seat.cancelLeaving();
+        int attempt = seat.leavingAttempt;
+        seat.scheduledLeaving = scheduler.schedule(() -> stepAway(seatKey, seat, attempt), Instant.now());
+    }
+
+    private void stepAway(SeatKey seatKey, Seat seat, int attempt) {
+        synchronized(lock) {
+            if(seats.get(seatKey) != seat || seat.leavingAttempt != attempt || !seat.sessionIds.isEmpty()) {
+                return;
+            }
+            // Nobody can return until everyone has been told that the person left the table
+            seat.leaving = true;
+        }
+        UUID roomId = seatKey.roomId();
+        Departure departure = null;
+        try {
+            departure = roomService.stepAway(roomId, seatKey.nickname()).orElse(null);
+            if(departure != null) {
+                Participant participant = departure.participant();
+                log.info("{} left the table in the room {} after closing the page", participant.getNickname(), roomId);
+                tellRoom(roomId, new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, toDto(participant)));
+            }
+        }
+        catch(RuntimeException exception) {
+            // The room is gone already, or the database is not available: there is nobody to tell
+            log.warn("Couldn't take {} away from the table in the room {}: {}", seatKey.nickname(), roomId,
+                    exception.getMessage());
+        }
+        finally {
+            synchronized(lock) {
+                if(departure != null && seats.get(seatKey) == seat) {
+                    seat.leaving = false;
+                    seat.departure = departure;
+                    int leavingAttempt = seat.leavingAttempt;
+                    seat.scheduledLeaving = scheduler.schedule(() -> leaveForGood(seatKey, seat, leavingAttempt),
+                            Instant.now().plus(gracePeriod));
+                }
+                else {
+                    seats.remove(seatKey, seat);
+                }
+            }
+        }
+    }
+
+    private Participant bringBack(SeatKey seatKey, Seat seat, Departure departure) {
+        UUID roomId = seatKey.roomId();
+        Participant participant = departure.participant();
+        boolean broughtBack;
+        try {
+            broughtBack = roomService.bringBack(roomId, departure);
+        }
+        catch(RuntimeException exception) {
+            log.warn("Couldn't bring {} back to the room {}: {}", participant.getNickname(), roomId, exception.getMessage());
+            broughtBack = false;
+        }
+        if(!broughtBack) {
+            // Someone else took the nickname meanwhile, or the room is gone
+            synchronized(lock) {
+                if(seats.remove(seatKey, seat)) {
+                    release(seatKey, seat);
+                }
+            }
+            log.info("{} left the room {} after {}", participant.getNickname(), roomId,
+                    LeaveReason.PAGE_CLOSED.description());
+            activity.left(LeaveReason.PAGE_CLOSED);
+            throw notInRoom(roomId, participant.getNickname());
+        }
+        log.info("{} came back to the table in the room {}", participant.getNickname(), roomId);
+        tellRoom(roomId, new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, toDto(participant)));
+        if(departure.vote() != null) {
+            tellRoom(roomId, new RoomEvent(roomId, EventType.VOTE_ADDED, modelMapper.map(departure.vote(), VoteDto.class)));
+        }
+        return participant;
+    }
+
+    // Nobody came back to the seat of someone who stepped away, so they have left the room
+    private void leaveForGood(SeatKey seatKey, Seat seat, int attempt) {
+        Departure departure;
+        synchronized(lock) {
+            if(seats.get(seatKey) != seat || seat.leavingAttempt != attempt || seat.departure == null) {
+                return;
+            }
+            departure = seat.departure;
+            seats.remove(seatKey);
+        }
+        log.info("{} left the room {} after {}", departure.participant().getNickname(), seatKey.roomId(),
+                LeaveReason.PAGE_CLOSED.description());
+        activity.left(LeaveReason.PAGE_CLOSED);
+        try {
+            roomService.removeIfEmpty(seatKey.roomId());
+        }
+        catch(RuntimeException exception) {
+            log.warn("Couldn't delete the room {} after {} left: {}", seatKey.roomId(), seatKey.nickname(),
+                    exception.getMessage());
+        }
+    }
+
     private void leave(SeatKey seatKey, Seat seat, int attempt, LeaveReason reason) {
         synchronized(lock) {
             if(seats.get(seatKey) != seat || seat.leavingAttempt != attempt || !seat.sessionIds.isEmpty()) {
@@ -244,24 +369,31 @@ public class RoomPresence {
             }
             seat.leaving = true;
         }
+        UUID roomId = seatKey.roomId();
         try {
-            roomService.removeParticipant(seatKey.roomId(), seatKey.nickname()).ifPresent(participant -> {
-                log.info("{} left the room {} after {}", participant.getNickname(), seatKey.roomId(), reason.description());
+            roomService.removeParticipant(roomId, seatKey.nickname()).ifPresent(participant -> {
+                log.info("{} left the room {} after {}", participant.getNickname(), roomId, reason.description());
                 activity.left(reason);
-                ParticipantDto removed = modelMapper.map(participant, ParticipantDto.class);
-                messagingTemplate.convertAndSend(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + "." + seatKey.roomId(),
-                        new RoomEvent(seatKey.roomId(), EventType.PARTICIPANT_REMOVED, removed));
+                tellRoom(roomId, new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, toDto(participant)));
             });
         }
         catch(RuntimeException exception) {
             // The room is gone already, or the database is not available: there is nobody to tell
-            log.warn("Couldn't remove {} from the room {}: {}", seatKey.nickname(), seatKey.roomId(), exception.getMessage());
+            log.warn("Couldn't remove {} from the room {}: {}", seatKey.nickname(), roomId, exception.getMessage());
         }
         finally {
             synchronized(lock) {
                 seats.remove(seatKey, seat);
             }
         }
+    }
+
+    private void tellRoom(UUID roomId, RoomEvent event) {
+        messagingTemplate.convertAndSend(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + "." + roomId, event);
+    }
+
+    private ParticipantDto toDto(Participant participant) {
+        return modelMapper.map(participant, ParticipantDto.class);
     }
 
     private static RoomServiceException notInRoom(UUID roomId, String nickname) {
@@ -280,6 +412,8 @@ public class RoomPresence {
         private int leavingAttempt;
         // The participant is being removed from the room, so it is too late to return
         private boolean leaving;
+        // Who stepped away from the table with what vote, while they may come back
+        private Departure departure;
 
         private void cancelLeaving() {
             if(scheduledLeaving != null) {

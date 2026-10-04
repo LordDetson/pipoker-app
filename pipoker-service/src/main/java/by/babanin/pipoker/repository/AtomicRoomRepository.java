@@ -4,6 +4,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import by.babanin.pipoker.entity.Participant;
+import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Vote;
 
 /**
@@ -19,11 +20,20 @@ public interface AtomicRoomRepository {
     boolean addParticipant(UUID roomId, Participant participant);
 
     /**
+     * Adds the participant back together with the vote they had.
+     *
+     * @param vote null when they hadn't voted
+     * @return false when the room is missing or already has a participant with this nickname
+     */
+    boolean returnParticipant(UUID roomId, Participant participant, Vote vote);
+
+    /**
      * Removes the participant together with their vote.
      *
-     * @return the removed participant, empty when the room is missing or has no such participant
+     * @return the room as it was before, with the participant and their vote, empty when the room is missing or has
+     * no such participant
      */
-    Optional<Participant> removeParticipant(UUID roomId, String key);
+    Optional<Room> removeParticipant(UUID roomId, String key);
 
     /**
      * Deletes the room only if nobody is left in it, so someone joining at the same moment keeps the room.

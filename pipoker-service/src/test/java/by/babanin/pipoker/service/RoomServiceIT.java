@@ -208,6 +208,40 @@ class RoomServiceIT {
     }
 
     @Test
+    @DisplayName("Someone who steps away comes back with their vote, unless someone took the nickname")
+    void stepAwayAndComeBack() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1", "2")).getId();
+        roomService.addParticipant(roomId, "Alex");
+        roomService.addVote(roomId, "Alex", "2");
+
+        // When the last person steps away
+        Departure departure = roomService.stepAway(roomId, "Alex").orElseThrow();
+
+        // Then the room is kept for them
+        Room away = roomService.get(roomId);
+        assertFalse(away.haveParticipants());
+        assertTrue(away.getVotes().isEmpty());
+
+        // When
+        assertTrue(roomService.bringBack(roomId, departure));
+
+        // Then
+        Room back = roomService.get(roomId);
+        assertTrue(back.containsParticipant("Alex"));
+        assertEquals("2", back.getVote("Alex").getCard().getValue());
+
+        // When someone else takes the nickname while Alex is away
+        roomService.stepAway(roomId, "Alex");
+        roomService.addWatcher(roomId, "alex");
+
+        // Then Alex can't come back
+        assertFalse(roomService.bringBack(roomId, departure));
+        assertTrue(roomService.get(roomId).getParticipant("Alex").isWatcher());
+        assertTrue(roomService.get(roomId).getVotes().isEmpty());
+    }
+
+    @Test
     @DisplayName("No join, vote or leave is lost when a whole team acts at the same moment")
     void simultaneousChanges() throws Exception {
         // Given

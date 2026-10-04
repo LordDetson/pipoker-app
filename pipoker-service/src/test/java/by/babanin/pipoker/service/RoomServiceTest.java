@@ -408,18 +408,57 @@ public class RoomServiceTest {
     @DisplayName("Room is kept when a participant leaves and others remain")
     void removeParticipant() {
         // Given
-        UUID roomId = UUID.randomUUID();
-        Participant first = Participant.createParticipant("First");
-        Mockito.when(roomRepository.removeParticipant(roomId, "first"))
-                .thenReturn(Optional.of(first));
+        Room before = new Room("test", new Deck());
+        Participant first = before.addParticipant("First");
+        before.addParticipant("Second");
+        Mockito.when(roomRepository.removeParticipant(before.getId(), "first"))
+                .thenReturn(Optional.of(before));
 
         // When
-        Optional<Participant> removed = roomService.removeParticipant(roomId, " FIRST ");
+        Optional<Participant> removed = roomService.removeParticipant(before.getId(), " FIRST ");
 
         // Then: the room is deleted only if nobody is left in it at that moment
         assertEquals(Optional.of(first), removed);
-        Mockito.verify(roomRepository).removeIfEmpty(roomId);
+        Mockito.verify(roomRepository).removeIfEmpty(before.getId());
         Mockito.verify(roomRepository, Mockito.never()).delete(ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Someone who steps away takes their vote along, and the room is kept")
+    void stepAway() {
+        // Given
+        Deck deck = new Deck();
+        deck.add("5");
+        Room before = new Room("test", deck);
+        Participant alex = before.addParticipant("Alex");
+        Vote vote = before.addVote("Alex", "5");
+        Mockito.when(roomRepository.removeParticipant(before.getId(), "alex"))
+                .thenReturn(Optional.of(before));
+
+        // When
+        Optional<Departure> departure = roomService.stepAway(before.getId(), "Alex");
+
+        // Then
+        assertEquals(Optional.of(new Departure(alex, vote)), departure);
+        assertEquals("5", departure.orElseThrow().vote().getCard().getValue());
+        Mockito.verify(roomRepository, Mockito.never()).removeIfEmpty(ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("Someone who stepped away is brought back with their vote")
+    void bringBack() {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Participant alex = Participant.createParticipant("Alex");
+        Departure departure = new Departure(alex, null);
+        Mockito.when(roomRepository.returnParticipant(roomId, alex, null))
+                .thenReturn(true);
+
+        // When
+        boolean broughtBack = roomService.bringBack(roomId, departure);
+
+        // Then
+        assertTrue(broughtBack);
     }
 
     @Test
@@ -455,12 +494,13 @@ public class RoomServiceTest {
         RoomRepository repository = Mockito.mock(RoomRepository.class);
         RoomService service = new RoomService(repository, validator);
         ReflectionTestUtils.setField(service, "allowRemoveRoomIfNotHaveParticipants", false);
-        UUID roomId = UUID.randomUUID();
-        Mockito.when(repository.removeParticipant(roomId, "last"))
-                .thenReturn(Optional.of(Participant.createParticipant("last")));
+        Room before = new Room("test", new Deck());
+        before.addParticipant("last");
+        Mockito.when(repository.removeParticipant(before.getId(), "last"))
+                .thenReturn(Optional.of(before));
 
         // When
-        service.removeParticipant(roomId, "last");
+        service.removeParticipant(before.getId(), "last");
 
         // Then
         Mockito.verify(repository, Mockito.never()).removeIfEmpty(ArgumentMatchers.any());

@@ -345,6 +345,72 @@ class RoomApiIT {
     }
 
     @Test
+    @DisplayName("Someone who refreshes the page comes back to the table with the vote, and everyone sees it")
+    void refreshedPage() throws Exception {
+        // Given
+        UUID roomId = createRoom(dmitry, "test", List.of("1"), new ParticipantDto("Dmitry", false)).getId();
+        String room = "/app/room/" + roomId;
+        BlockingQueue<RoomEvent> events = dmitry.subscribe("/topic/room." + roomId, RoomEvent.class);
+        alex.send(room + "/participants/add", new ParticipantDto("Alex", false));
+        next(events);
+        alex.send(room + "/votes/add", new VoteDto("Alex", "1"));
+        next(events);
+
+        // When the page says it is being closed
+        alex.send("/app/presence/page-closed", "");
+        alex.close();
+
+        // Then Alex leaves the table at once
+        RoomEvent left = events.poll(GRACE_PERIOD_SECONDS * 1000 / 2, TimeUnit.MILLISECONDS);
+        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)), left);
+
+        // When the refreshed page returns to the seat
+        alex = connectClient();
+        BlockingQueue<RoomEvent> returned = alex.subscribe("/user/topic/room.returned", RoomEvent.class);
+        alex.send(room + "/participants/return", "Alex");
+
+        // Then Alex is back at the table with the vote
+        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, new ParticipantDto("Alex", false)), next(returned));
+        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, new ParticipantDto("Alex", false)), next(events));
+        RoomEvent vote = next(events);
+        assertEquals(EventType.VOTE_ADDED, vote.getEventType());
+        assertEquals("1", vote.getVote().getCard());
+        Thread.sleep(Duration.ofSeconds(GRACE_PERIOD_SECONDS + 1).toMillis());
+        assertNoMessage(events);
+        Room stored = roomRepository.findById(roomId).orElseThrow();
+        assertTrue(stored.containsParticipant("Alex"));
+        assertEquals("1", stored.getVote("Alex").getCard().getValue());
+    }
+
+    @Test
+    @DisplayName("The room waits for the only person who refreshes the page")
+    void onlyPersonRefreshes() throws Exception {
+        // Given
+        UUID roomId = createRoom(alex, "test", List.of("1"), new ParticipantDto("Alex", false)).getId();
+        String room = "/app/room/" + roomId;
+
+        // When the page says it is being closed
+        alex.send("/app/presence/page-closed", "");
+        alex.close();
+        await().atMost(Duration.ofSeconds(GRACE_PERIOD_SECONDS))
+                .until(() -> !roomRepository.findById(roomId).orElseThrow().haveParticipants());
+
+        // Then the room is kept, and the refreshed page returns to it
+        alex = connectClient();
+        BlockingQueue<RoomEvent> returned = alex.subscribe("/user/topic/room.returned", RoomEvent.class);
+        alex.send(room + "/participants/return", "Alex");
+        assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, new ParticipantDto("Alex", false)), next(returned));
+        assertTrue(roomRepository.findById(roomId).orElseThrow().containsParticipant("Alex"));
+
+        // When the page is closed for good
+        alex.send("/app/presence/page-closed", "");
+        alex.close();
+
+        // Then the room is deleted after the grace period
+        await().atMost(Duration.ofSeconds(GRACE_PERIOD_SECONDS + 10)).until(() -> !roomRepository.existsById(roomId));
+    }
+
+    @Test
     @DisplayName("Someone who connects again in time keeps the seat and the vote")
     void reconnectInTime() throws Exception {
         // Given

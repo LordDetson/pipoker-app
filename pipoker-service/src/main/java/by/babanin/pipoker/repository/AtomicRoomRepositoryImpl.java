@@ -42,14 +42,24 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     }
 
     @Override
-    public Optional<Participant> removeParticipant(UUID roomId, String key) {
+    public boolean returnParticipant(UUID roomId, Participant participant, Vote vote) {
+        Query room = query(where("id").is(roomId)
+                .and(PARTICIPANTS + "." + PARTICIPANT_KEY).ne(participant.getKey()));
+        Update update = new Update().push(PARTICIPANTS, toDocument(participant));
+        if(vote != null) {
+            update.push(VOTES, toDocument(vote));
+        }
+        return mongoTemplate.updateFirst(room, update, Room.class).getModifiedCount() == 1;
+    }
+
+    @Override
+    public Optional<Room> removeParticipant(UUID roomId, String key) {
         Query room = query(where("id").is(roomId).and(PARTICIPANTS + "." + PARTICIPANT_KEY).is(key));
         Update update = new Update()
                 .pull(PARTICIPANTS, new Document(PARTICIPANT_KEY, key))
                 .pull(VOTES, new Document(VOTE_KEY, key));
         // Returns the room as it was before the update, which still has the participant
-        return Optional.ofNullable(mongoTemplate.findAndModify(room, update, Room.class))
-                .flatMap(before -> before.findParticipant(key));
+        return Optional.ofNullable(mongoTemplate.findAndModify(room, update, Room.class));
     }
 
     @Override
