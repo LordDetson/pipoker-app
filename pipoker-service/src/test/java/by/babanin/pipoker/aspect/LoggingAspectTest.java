@@ -27,7 +27,7 @@ class LoggingAspectTest {
     void setup() {
         roomRepository = Mockito.mock(RoomRepository.class);
         AspectJProxyFactory factory = new AspectJProxyFactory(
-                new RoomService(roomRepository, Validation.buildDefaultValidatorFactory().getValidator()));
+                new RoomService(roomRepository, Validation.buildDefaultValidatorFactory().getValidator(), event -> {}));
         factory.setProxyTargetClass(true);
         factory.addAspect(new LoggingAspect());
         proxy = factory.getProxy();

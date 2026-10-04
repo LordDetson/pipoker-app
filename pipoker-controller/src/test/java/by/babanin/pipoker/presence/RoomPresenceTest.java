@@ -48,6 +48,7 @@ import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.service.Departure;
+import by.babanin.pipoker.service.RoomRemovedEvent;
 import by.babanin.pipoker.service.RoomService;
 
 class RoomPresenceTest {
@@ -145,6 +146,15 @@ class RoomPresenceTest {
         verify(activity).left(LeaveReason.PAGE_CLOSED);
         verify(messagingTemplate, times(1)).convertAndSend(anyString(), any(Object.class));
         assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
+    }
+
+    @Test
+    @DisplayName("The pages still open on a removed room are told")
+    void roomRemoved() {
+        presence.roomRemoved(new RoomRemovedEvent(room.getId()));
+
+        verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
+                new RoomEvent(room.getId(), EventType.ROOM_REMOVED));
     }
 
     @Test

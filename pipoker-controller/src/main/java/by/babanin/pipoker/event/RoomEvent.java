@@ -34,7 +34,12 @@ public class RoomEvent {
         /**
          * The room was closed because nobody did anything in it for long, and everyone left it.
          */
-        ROOM_CLOSED
+        ROOM_CLOSED,
+        /**
+         * Everyone left the room, so it was deleted. Only pages that aren't at the table get it, like a join form;
+         * it may come before the PARTICIPANT_REMOVED of the last person who left.
+         */
+        ROOM_REMOVED
     }
 
     @NotNull

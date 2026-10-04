@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import by.babanin.pipoker.entity.Deck;
@@ -28,13 +29,15 @@ public class RoomService {
 
     private final RoomRepository roomRepository;
     private final Validator validator;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Value("${service.room.allowRemoveRoomIfNotHaveParticipants:true}")
     private boolean allowRemoveRoomIfNotHaveParticipants;
 
-    public RoomService(RoomRepository roomRepository, Validator validator) {
+    public RoomService(RoomRepository roomRepository, Validator validator, ApplicationEventPublisher eventPublisher) {
         this.roomRepository = roomRepository;
         this.validator = validator;
+        this.eventPublisher = eventPublisher;
     }
 
     // Rooms
@@ -169,10 +172,11 @@ public class RoomService {
 
     /**
      * Deletes the room if nobody is left in it, so someone joining at the same moment keeps the room.
+     * A deleted room is announced with {@link RoomRemovedEvent}.
      */
     public void removeIfEmpty(UUID roomId) {
-        if(allowRemoveRoomIfNotHaveParticipants) {
-            roomRepository.removeIfEmpty(roomId);
+        if(allowRemoveRoomIfNotHaveParticipants && roomRepository.removeIfEmpty(roomId)) {
+            eventPublisher.publishEvent(new RoomRemovedEvent(roomId));
         }
     }
 
