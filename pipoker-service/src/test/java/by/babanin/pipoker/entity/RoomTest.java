@@ -2,6 +2,7 @@ package by.babanin.pipoker.entity;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -252,6 +253,72 @@ class RoomTest {
     }
 
     @Test
+    @DisplayName("A round enters the history when its cards are revealed for the first time")
+    void showVotesRecordsRound() {
+        Room room = new Room("test", deck("1", "2"));
+        room.addParticipant("Dmitry");
+        room.addParticipant("Alex");
+        room.addVote("Dmitry", "2");
+        room.addVote("Alex", "1");
+        Instant revealedAt = Instant.parse("2026-10-04T17:00:00Z");
+
+        Optional<Round> round = room.showVotes(revealedAt);
+        Optional<Round> again = room.showVotes(revealedAt.plusSeconds(5));
+
+        assertAll(
+                () -> assertTrue(room.isVotesShown()),
+                () -> assertEquals(revealedAt, round.orElseThrow().getRevealedAt()),
+                () -> assertEquals(List.of("Dmitry:2", "Alex:1"), votesOf(round.orElseThrow())),
+                () -> assertTrue(again.isEmpty()),
+                () -> assertEquals(List.of(round.orElseThrow()), room.getHistory())
+        );
+    }
+
+    @Test
+    @DisplayName("A round nobody voted in doesn't enter the history")
+    void showVotesWithoutVotes() {
+        Room room = new Room("test", deck("1"));
+
+        assertTrue(room.showVotes(Instant.now()).isEmpty());
+        assertTrue(room.isVotesShown());
+        assertTrue(room.getHistory().isEmpty());
+    }
+
+    @Test
+    @DisplayName("The history outlives the round and the people who voted in it")
+    void historyOutlivesRound() {
+        Room room = new Room("test", deck("1", "2"));
+        room.addParticipant("Dmitry");
+        room.addVote("Dmitry", "1");
+        room.showVotes(Instant.now());
+
+        room.clearVotes();
+        room.removeParticipant("Dmitry");
+        room.addParticipant("Alex");
+        room.addVote("Alex", "2");
+        room.showVotes(Instant.now());
+
+        assertEquals(List.of(List.of("Dmitry:1"), List.of("Alex:2")), room.getHistory().stream().map(RoomTest::votesOf).toList());
+    }
+
+    @Test
+    @DisplayName("The history keeps only the latest rounds")
+    void historyLimit() {
+        Room room = new Room("test", deck("1"));
+        room.addParticipant("Dmitry");
+        Instant start = Instant.parse("2026-10-04T17:00:00Z");
+        for(int i = 0; i <= Room.HISTORY_LIMIT; i++) {
+            room.addVote("Dmitry", "1");
+            room.showVotes(start.plusSeconds(i));
+            room.clearVotes();
+        }
+
+        assertEquals(Room.HISTORY_LIMIT, room.getHistory().size());
+        assertEquals(start.plusSeconds(1), room.getHistory().get(0).getRevealedAt());
+        assertEquals(start.plusSeconds(Room.HISTORY_LIMIT), room.getHistory().get(Room.HISTORY_LIMIT - 1).getRevealedAt());
+    }
+
+    @Test
     @DisplayName("Clearing participants also clears votes")
     void clearParticipants() {
         Room room = new Room("test", deck("1"));
@@ -315,5 +382,11 @@ class RoomTest {
             deck.add(cardValue);
         }
         return deck;
+    }
+
+    private static List<String> votesOf(Round round) {
+        return round.getVotes().stream()
+                .map(vote -> vote.getParticipant().getNickname() + ":" + vote.getCard().getValue())
+                .toList();
     }
 }

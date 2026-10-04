@@ -36,7 +36,7 @@ class RoomActivityTest {
         activity.left(LeaveReason.CONNECTION_LOST);
 
         assertEquals(1, count("pipoker.connections"));
-        assertEquals(1, count("pipoker.rooms.created"));
+        assertEquals(1, count("pipoker.room.creations"));
         assertEquals(2, registry.get("pipoker.participants.joined").tag("role", "voter").counter().count());
         assertEquals(1, registry.get("pipoker.participants.joined").tag("role", "watcher").counter().count());
         assertEquals(2, count("pipoker.votes"));

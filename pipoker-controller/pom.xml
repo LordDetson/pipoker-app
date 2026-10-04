@@ -17,7 +17,7 @@
             **/config/**/*,
             **/exception/**/*
         </sonar.coverage.exclusions>
-        <modelmapper.version>3.2.0</modelmapper.version>
+        <modelmapper.version>3.2.6</modelmapper.version>
         <!--<embed.mongo.version>4.12.2</embed.mongo.version>-->
     </properties>
 
@@ -68,7 +68,7 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
+            <artifactId>spring-boot-starter-actuator-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -127,7 +127,7 @@
                                 <ignoredUsedUndeclaredDependency>org.junit.jupiter:junit-jupiter-api</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.awaitility:awaitility</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.mockito:mockito-core</ignoredUsedUndeclaredDependency>
-                                <ignoredUsedUndeclaredDependency>com.fasterxml.jackson.core:jackson-databind</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>tools.jackson.core:jackson-databind</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>com.fasterxml.jackson.core:jackson-annotations</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>jakarta.validation:jakarta.validation-api</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>jakarta.annotation:jakarta.annotation-api</ignoredUsedUndeclaredDependency>
@@ -136,7 +136,7 @@
                             <ignoredNonTestScopedDependencies>
                                 <ignoredNonTestScopedDependency>org.springframework*</ignoredNonTestScopedDependency>
                                 <ignoredNonTestScopedDependency>jakarta.annotation:jakarta.annotation-api</ignoredNonTestScopedDependency>
-                                <ignoredNonTestScopedDependency>com.fasterxml.jackson.core:jackson-databind</ignoredNonTestScopedDependency>
+                                <ignoredNonTestScopedDependency>tools.jackson.core:jackson-databind</ignoredNonTestScopedDependency>
                                 <ignoredNonTestScopedDependency>org.apache.logging.log4j:log4j-api</ignoredNonTestScopedDependency>
                             </ignoredNonTestScopedDependencies>
                         </configuration>

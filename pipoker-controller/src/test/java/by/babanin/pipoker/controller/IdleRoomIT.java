@@ -24,7 +24,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import by.babanin.pipoker.IntegrationTestContainers;
 import by.babanin.pipoker.event.ErrorEvent;
@@ -60,7 +60,7 @@ class IdleRoomIT {
     private int port;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JsonMapper jsonMapper;
 
     @Autowired
     private RoomRepository roomRepository;
@@ -74,8 +74,8 @@ class IdleRoomIT {
     @BeforeEach
     void connect() throws Exception {
         await().atMost(Duration.ofSeconds(30)).until(brokerRelay::isBrokerAvailable);
-        dmitry = new StompTestClient(String.format("http://localhost:%d/ws", port), objectMapper);
-        alex = new StompTestClient(String.format("http://localhost:%d/ws", port), objectMapper);
+        dmitry = new StompTestClient(String.format("http://localhost:%d/ws", port), jsonMapper);
+        alex = new StompTestClient(String.format("http://localhost:%d/ws", port), jsonMapper);
     }
 
     @AfterEach

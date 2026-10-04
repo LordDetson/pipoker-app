@@ -22,7 +22,11 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -80,7 +84,7 @@ class RoomPresenceTest {
             Vote vote = invocation.getArgument(0);
             return new VoteDto(vote.getParticipant().getNickname(), vote.getCard().getValue());
         });
-        presence = new RoomPresence(roomService, modelMapper, messagingTemplate, activity, scheduler, GRACE_PERIOD, STARTUP_GRACE_PERIOD);
+        presence = new RoomPresence(roomService, new SeatLocks(), modelMapper, messagingTemplate, activity, scheduler, GRACE_PERIOD, STARTUP_GRACE_PERIOD);
 
         Deck deck = new Deck();
         deck.add("1");
@@ -95,11 +99,7 @@ class RoomPresenceTest {
             }
             return removed;
         });
-        when(roomService.stepAway(eq(room.getId()), anyString())).thenAnswer(invocation -> {
-            String nickname = invocation.getArgument(1);
-            Vote vote = room.findVote(nickname).orElse(null);
-            return room.removeParticipant(nickname).map(participant -> new Departure(participant, vote));
-        });
+        when(roomService.stepAway(eq(room.getId()), anyString())).thenAnswer(invocation -> stepAway(invocation.getArgument(1)));
         when(roomService.bringBack(eq(room.getId()), any(Departure.class))).thenAnswer(invocation -> {
             Departure departure = invocation.getArgument(1);
             String nickname = departure.participant().getNickname();
@@ -192,6 +192,49 @@ class RoomPresenceTest {
         Participant returned = presence.returnTo(room.getId(), "alex", "alex-tab-after-refresh");
 
         assertEquals("Alex", returned.getNickname());
+        assertTrue(room.containsParticipant("Alex"));
+        assertEquals("1", room.getVote("Alex").getCard().getValue());
+        String topic = "/topic/room." + room.getId();
+        InOrder told = inOrder(messagingTemplate);
+        told.verify(messagingTemplate).convertAndSend(topic,
+                new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
+        told.verify(messagingTemplate).convertAndSend(topic,
+                new RoomEvent(room.getId(), EventType.PARTICIPANT_ADDED, new ParticipantDto("Alex", false)));
+        told.verify(messagingTemplate).convertAndSend(topic,
+                new RoomEvent(room.getId(), EventType.VOTE_ADDED, new VoteDto("Alex", "1")));
+        scheduler.advance(LATER);
+        assertTrue(room.containsParticipant("Alex"));
+        verify(activity, never()).left(any());
+    }
+
+    @Test
+    @DisplayName("A refreshed page that comes back while the person is being taken away from the table brings them back")
+    void refreshedPageComesBackWhileSteppingAway() throws Exception {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        room.addVote("Alex", "1");
+        CountDownLatch steppingAway = new CountDownLatch(1);
+        CountDownLatch stored = new CountDownLatch(1);
+        when(roomService.stepAway(eq(room.getId()), anyString())).thenAnswer(invocation -> {
+            steppingAway.countDown();
+            // The stored room changes slowly, for example while the database is busy
+            stored.await();
+            return stepAway(invocation.getArgument(1));
+        });
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        Thread closing = new Thread(() -> scheduler.advance(Duration.ZERO));
+        closing.start();
+        assertTrue(steppingAway.await(5, TimeUnit.SECONDS));
+
+        CompletableFuture<Participant> returned = CompletableFuture.supplyAsync(
+                () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
+        assertThrows(TimeoutException.class, () -> returned.get(200, TimeUnit.MILLISECONDS),
+                "the page waits until the person has left the table");
+        stored.countDown();
+        closing.join(5000);
+
+        assertEquals("Alex", returned.get(5, TimeUnit.SECONDS).getNickname());
         assertTrue(room.containsParticipant("Alex"));
         assertEquals("1", room.getVote("Alex").getCard().getValue());
         String topic = "/topic/room." + room.getId();
@@ -470,6 +513,11 @@ class RoomPresenceTest {
 
         presence.forget(room.getId(), "Alex");
         assertEquals(0, presence.peopleOnline());
+    }
+
+    private Optional<Departure> stepAway(String nickname) {
+        Vote vote = room.findVote(nickname).orElse(null);
+        return room.removeParticipant(nickname).map(participant -> new Departure(participant, vote));
     }
 
     private static SessionDisconnectEvent disconnect(String sessionId, CloseStatus closeStatus) {

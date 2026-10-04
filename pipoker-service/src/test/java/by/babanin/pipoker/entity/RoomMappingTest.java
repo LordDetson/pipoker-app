@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.bson.Document;
@@ -52,6 +53,7 @@ class RoomMappingTest {
         room.addParticipant("Dmitry");
         room.addWatcher("Alex");
         room.addVote("Dmitry", "1d");
+        room.showVotes(Instant.parse("2026-10-04T17:00:00Z"));
 
         // When
         Document document = new Document();
@@ -65,7 +67,19 @@ class RoomMappingTest {
                 () -> assertEquals(List.of(new Card("1h"), new Card("1d")), result.getDeck().get()),
                 () -> assertEquals(room.getParticipants(), result.getParticipants()),
                 () -> assertEquals(room.getVotes(), result.getVotes()),
-                () -> assertEquals("1d", result.getVote("Dmitry").getCard().getValue())
+                () -> assertEquals("1d", result.getVote("Dmitry").getCard().getValue()),
+                () -> assertEquals(room.getHistory(), result.getHistory()),
+                () -> assertEquals("1d", result.getHistory().get(0).getVotes().get(0).getCard().getValue())
         );
+    }
+
+    @Test
+    @DisplayName("A room stored before the history was kept is read with an empty history")
+    void readWithoutHistory() {
+        Document document = new Document();
+        converter.write(new Room("test", new Deck()), document);
+        document.remove("history");
+
+        assertEquals(List.of(), converter.read(Room.class, document).getHistory());
     }
 }

@@ -1,10 +1,12 @@
 package by.babanin.pipoker.model;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -44,6 +46,10 @@ public class RoomDto {
     @NotNull
     @JsonDeserialize(as = LinkedHashSet.class)
     private final LinkedHashSet<VoteDto> votes = new LinkedHashSet<>();
+
+    // The revealed rounds, oldest first; left out of the JSON while there are none
+    @NotNull
+    private final List<RoundDto> history = new ArrayList<>();
 
     // The cards of the current round are revealed; left out of the JSON while they are hidden
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)

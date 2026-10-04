@@ -74,11 +74,13 @@ public interface AtomicRoomRepository {
     Optional<Vote> removeVote(UUID roomId, String key);
 
     /**
-     * Reveals the cards of the current round.
+     * Reveals the cards of the current round. The first time a round with votes is revealed, it enters the history
+     * in the same update (see {@link Room#showVotes}), so two people revealing it at once record it once.
      *
-     * @return false when the room is missing
+     * @param revealedAt when the round enters the history
+     * @return the room as it was before, empty when the room is missing
      */
-    boolean showVotes(UUID roomId);
+    Optional<Room> showVotes(UUID roomId, Instant revealedAt);
 
     /**
      * Starts a new round: no votes, cards hidden, no timer.

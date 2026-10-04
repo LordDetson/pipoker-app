@@ -30,6 +30,9 @@ import lombok.ToString;
 @Document("room")
 public class Room {
 
+    // The history keeps this many latest rounds, so a room that is used for months stays far below the document size limit
+    public static final int HISTORY_LIMIT = 100;
+
     @EqualsAndHashCode.Include
     @ToString.Include
     @Getter
@@ -59,6 +62,10 @@ public class Room {
     // Whether the cards of this round are revealed, so people who join or reconnect later see them too
     @Getter
     private boolean votesShown;
+
+    // The revealed rounds, oldest first. It lives as long as the room; rooms stored before it was kept start with none.
+    @NotNull
+    private List<Round> history = new CopyOnWriteArrayList<>();
 
     // When someone last did something in the room: created it, joined it, voted, revealed the cards or started a new
     // round. A room nobody acts in for long is closed (see RoomService#closeIdleRooms). Rooms stored before this field
@@ -189,8 +196,27 @@ public class Room {
         return vote;
     }
 
-    public void showVotes() {
+    /**
+     * Reveals the cards of the current round. The first time a round with votes is revealed, it enters the history.
+     *
+     * @return the round that entered the history, empty when the cards were already revealed or nobody voted
+     */
+    public Optional<Round> showVotes(Instant revealedAt) {
+        Optional<Round> round = votesShown || votes.isEmpty()
+                ? Optional.empty()
+                : Optional.of(new Round(revealedAt, List.copyOf(votes)));
+        round.ifPresent(added -> {
+            history.add(added);
+            if(history.size() > HISTORY_LIMIT) {
+                history.remove(0);
+            }
+        });
         votesShown = true;
+        return round;
+    }
+
+    public List<Round> getHistory() {
+        return Collections.unmodifiableList(history);
     }
 
     // A new round also ends the discussion of the previous one, so its timer stops too
