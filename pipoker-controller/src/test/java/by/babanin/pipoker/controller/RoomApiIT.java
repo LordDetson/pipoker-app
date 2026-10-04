@@ -166,8 +166,10 @@ class RoomApiIT {
 
         // Votes are shown
         dmitry.send(room + "/votes/show", "");
-        RoomEvent shown = new RoomEvent(roomId, EventType.SHOW_VOTES);
-        assertEquals(shown, next(dmitryEvents));
+        RoomEvent shown = next(dmitryEvents);
+        assertEquals(EventType.SHOW_VOTES, shown.getEventType());
+        assertEquals(List.of(new VoteDto("Alex", "3"), new VoteDto("Dmitry", "2")), shown.getRound().getVotes());
+        assertEquals("3", shown.getRound().getVotes().get(0).getCard());
         assertEquals(shown, next(alexEvents));
         // Someone opening the room now sees the cards revealed
         assertTrue(alex.request(room, RoomDto.class).isVotesShown());
@@ -191,6 +193,8 @@ class RoomApiIT {
         assertEquals(2, state.getParticipants().size());
         assertTrue(state.getVotes().isEmpty());
         assertFalse(state.isVotesShown());
+        // The history keeps the round as it was revealed, with the vote Alex took back afterwards
+        assertEquals(List.of(shown.getRound()), state.getHistory());
     }
 
     @Test
