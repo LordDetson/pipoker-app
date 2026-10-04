@@ -25,6 +25,9 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     private static final String VOTES = "votes";
     private static final String VOTES_SHOWN = "votesShown";
     private static final String LAST_ACTIVITY = "lastActivity";
+    private static final String HISTORY = "history";
+    private static final String ROUND_REVEALED_AT = "revealedAt";
+    private static final String ROUND_VOTES = "votes";
     private static final String PARTICIPANT_KEY = "key";
     private static final String VOTE_KEY = "participant.key";
 
@@ -107,9 +110,22 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     }
 
     @Override
-    public boolean showVotes(UUID roomId) {
-        Update update = new Update().set(VOTES_SHOWN, true).set(LAST_ACTIVITY, Instant.now());
-        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
+    public Optional<Room> showVotes(UUID roomId, Instant revealedAt) {
+        // Every expression of the $set stage reads the room as it was before it, like Room#showVotes does
+        Document votes = new Document("$ifNull", List.of("$" + VOTES, List.of()));
+        Document history = new Document("$ifNull", List.of("$" + HISTORY, List.of()));
+        Document round = new Document(ROUND_REVEALED_AT, revealedAt).append(ROUND_VOTES, votes);
+        Document notRecorded = new Document("$or", List.of(
+                new Document("$eq", List.of("$" + VOTES_SHOWN, true)),
+                new Document("$eq", List.of(new Document("$size", votes), 0))));
+        Document recorded = new Document("$slice", List.of(
+                new Document("$concatArrays", List.of(history, List.of(round))), -Room.HISTORY_LIMIT));
+        AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", new Document(HISTORY,
+                new Document("$cond", List.of(notRecorded, history, recorded)))
+                .append(VOTES_SHOWN, true)
+                .append(LAST_ACTIVITY, Instant.now()))));
+        // Returns the room as it was before the update, which tells whether this update recorded the round
+        return Optional.ofNullable(mongoTemplate.findAndModify(query(where("id").is(roomId)), update, Room.class));
     }
 
     @Override

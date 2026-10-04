@@ -30,6 +30,7 @@ import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
 import by.babanin.pipoker.service.RoomService;
@@ -155,9 +156,12 @@ public class RoomController {
     @MessageMapping("/{roomId}/votes/show")
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent showVotes(@DestinationVariable UUID roomId) {
-        roomService.showVotes(roomId);
+        RoundDto round = roomService.showVotes(roomId)
+                .map(recorded -> modelMapper.map(recorded, RoundDto.class))
+                .orElse(null);
         activity.revealed();
-        return new RoomEvent(roomId, EventType.SHOW_VOTES);
+        modelMapper.validate();
+        return new RoomEvent(roomId, EventType.SHOW_VOTES, round);
     }
 
     @MessageExceptionHandler

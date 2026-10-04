@@ -2,6 +2,7 @@ package by.babanin.pipoker.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -24,9 +25,11 @@ import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.RoomNotFoundException;
@@ -644,11 +647,33 @@ public class RoomServiceTest {
     }
 
     @Test
+    @DisplayName("Revealing the cards tells the round that entered the history only the first time")
+    void showVotesTellsRecordedRound() {
+        UUID roomId = UUID.randomUUID();
+        Room hidden = new Room("test", deck("1h"));
+        hidden.addParticipant("Dmitry");
+        hidden.addVote("Dmitry", "1h");
+        Room revealed = new Room("test", deck("1h"));
+        revealed.addParticipant("Dmitry");
+        revealed.addVote("Dmitry", "1h");
+        revealed.showVotes(Instant.now());
+        Mockito.when(roomRepository.showVotes(ArgumentMatchers.eq(roomId), ArgumentMatchers.any()))
+                .thenReturn(Optional.of(hidden), Optional.of(revealed));
+
+        Round round = roomService.showVotes(roomId).orElseThrow();
+        Mockito.verify(roomRepository).showVotes(roomId, round.getRevealedAt());
+        Optional<Round> again = roomService.showVotes(roomId);
+
+        assertEquals(List.of(new Vote(Participant.createParticipant("Dmitry"), new Card("1h"))), round.getVotes());
+        assertTrue(again.isEmpty());
+    }
+
+    @Test
     @DisplayName("Revealing the cards of a missing room fails")
     void showVotesOfMissingRoom() {
         UUID roomId = UUID.randomUUID();
-        Mockito.when(roomRepository.showVotes(roomId))
-                .thenReturn(false);
+        Mockito.when(roomRepository.showVotes(ArgumentMatchers.eq(roomId), ArgumentMatchers.any()))
+                .thenReturn(Optional.empty());
 
         assertThrows(RoomServiceException.class, () -> roomService.showVotes(roomId));
     }

@@ -7,7 +7,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.UUID;
@@ -36,6 +38,7 @@ import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.event.RoomEvent;
@@ -46,6 +49,7 @@ import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
 import by.babanin.pipoker.service.RoomService;
@@ -323,6 +327,12 @@ class RoomControllerTest {
     void showVotes() throws Exception {
         // Given
         UUID roomId = UUID.randomUUID();
+        Instant revealedAt = Instant.parse("2026-10-04T17:00:00.123Z");
+        Round round = new Round(revealedAt, List.of(
+                new Vote(Participant.createParticipant("Kate"), new Card("1d")),
+                new Vote(Participant.createParticipant("Dmitry"), new Card("1h"))));
+        when(roomService.showVotes(roomId))
+                .thenReturn(Optional.of(round));
 
         // When
         String destination = String.format("/%s/votes/show", roomId);
@@ -331,8 +341,9 @@ class RoomControllerTest {
                         roomId);
 
         // Then
+        RoundDto expectedRound = new RoundDto(revealedAt, List.of(new VoteDto("Dmitry", "1h"), new VoteDto("Kate", "1d")));
         await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES), results.poll()));
+                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES, expectedRound), results.poll()));
         Mockito.verify(roomService, times(1)).showVotes(roomId);
         Mockito.verify(activity).revealed();
     }
