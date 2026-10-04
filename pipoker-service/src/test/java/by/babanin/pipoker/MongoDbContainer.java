@@ -31,10 +31,10 @@ public class MongoDbContainer extends GenericContainer<MongoDbContainer> {
     }
 
     public void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.data.mongodb.host", this::getHost);
-        registry.add("spring.data.mongodb.port", () -> getMappedPort(PORT));
-        registry.add("spring.data.mongodb.database", () -> DATABASE);
-        registry.add("spring.data.mongodb.username", () -> USERNAME);
-        registry.add("spring.data.mongodb.password", () -> PASSWORD);
+        registry.add("spring.mongodb.host", this::getHost);
+        registry.add("spring.mongodb.port", () -> getMappedPort(PORT));
+        registry.add("spring.mongodb.database", () -> DATABASE);
+        registry.add("spring.mongodb.username", () -> USERNAME);
+        registry.add("spring.mongodb.password", () -> PASSWORD);
     }
 }

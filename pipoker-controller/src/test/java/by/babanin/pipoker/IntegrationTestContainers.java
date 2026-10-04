@@ -48,11 +48,11 @@ public final class IntegrationTestContainers {
     public static void start(DynamicPropertyRegistry registry) {
         Startables.deepStart(MONGODB, RABBITMQ).join();
 
-        registry.add("spring.data.mongodb.host", MONGODB::getHost);
-        registry.add("spring.data.mongodb.port", () -> MONGODB.getMappedPort(MONGODB_PORT));
-        registry.add("spring.data.mongodb.database", () -> MONGODB_DATABASE);
-        registry.add("spring.data.mongodb.username", () -> MONGODB_USERNAME);
-        registry.add("spring.data.mongodb.password", () -> MONGODB_PASSWORD);
+        registry.add("spring.mongodb.host", MONGODB::getHost);
+        registry.add("spring.mongodb.port", () -> MONGODB.getMappedPort(MONGODB_PORT));
+        registry.add("spring.mongodb.database", () -> MONGODB_DATABASE);
+        registry.add("spring.mongodb.username", () -> MONGODB_USERNAME);
+        registry.add("spring.mongodb.password", () -> MONGODB_PASSWORD);
 
         registry.add("broker.host", RABBITMQ::getHost);
         registry.add("broker.stomp.port", () -> RABBITMQ.getMappedPort(STOMP_PORT));

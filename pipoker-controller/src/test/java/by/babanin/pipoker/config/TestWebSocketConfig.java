@@ -6,7 +6,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Profile;
 import org.springframework.messaging.converter.DefaultContentTypeResolver;
-import org.springframework.messaging.converter.MappingJackson2MessageConverter;
+import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -17,7 +17,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 import org.springframework.web.socket.sockjs.client.SockJsClient;
 import org.springframework.web.socket.sockjs.client.WebSocketTransport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import by.babanin.pipoker.PiPokerApplication;
 
@@ -44,9 +44,9 @@ public class TestWebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     @Bean
-    public WebSocketStompClient webSocketStompClient(ObjectMapper objectMapper) {
+    public WebSocketStompClient webSocketStompClient(JsonMapper jsonMapper) {
         WebSocketStompClient client = new WebSocketStompClient(new SockJsClient(List.of(new WebSocketTransport(new StandardWebSocketClient()))));
-        MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter(objectMapper);
+        JacksonJsonMessageConverter converter = new JacksonJsonMessageConverter(jsonMapper);
         DefaultContentTypeResolver resolver = new DefaultContentTypeResolver();
         resolver.setDefaultMimeType(MimeTypeUtils.APPLICATION_JSON);
         converter.setContentTypeResolver(resolver);

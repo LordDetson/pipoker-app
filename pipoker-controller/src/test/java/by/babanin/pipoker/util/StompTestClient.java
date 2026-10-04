@@ -12,7 +12,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import org.springframework.messaging.converter.CompositeMessageConverter;
-import org.springframework.messaging.converter.MappingJackson2MessageConverter;
+import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.converter.StringMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
@@ -25,7 +25,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 import org.springframework.web.socket.sockjs.client.SockJsClient;
 import org.springframework.web.socket.sockjs.client.WebSocketTransport;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Talks to the application the way the web client does: STOMP over SockJS,
@@ -38,11 +38,11 @@ public class StompTestClient implements AutoCloseable {
     private final WebSocketStompClient client;
     private final StompSession session;
 
-    public StompTestClient(String url, ObjectMapper objectMapper) throws Exception {
+    public StompTestClient(String url, JsonMapper jsonMapper) throws Exception {
         client = new WebSocketStompClient(new SockJsClient(List.of(new WebSocketTransport(new StandardWebSocketClient()))));
         client.setMessageConverter(new CompositeMessageConverter(List.of(
                 new StringMessageConverter(),
-                new MappingJackson2MessageConverter(objectMapper))));
+                new JacksonJsonMessageConverter(jsonMapper))));
         // Needed to wait for the broker's receipts
         ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
         taskScheduler.initialize();
