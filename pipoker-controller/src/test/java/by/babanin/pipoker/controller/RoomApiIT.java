@@ -5,6 +5,10 @@ import static by.babanin.pipoker.util.StompTestClient.next;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -16,8 +20,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.messaging.simp.stomp.StompBrokerRelayMessageHandler;
 import org.springframework.test.context.ActiveProfiles;
@@ -45,6 +51,8 @@ import by.babanin.pipoker.util.StompTestClient;
  */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, properties = "presence.grace-period=" + RoomApiIT.GRACE_PERIOD_SECONDS + "s")
 @ActiveProfiles("prod")
+// Serves the metrics the way the production backend does, tests leave them out otherwise
+@AutoConfigureObservability(tracing = false)
 class RoomApiIT {
 
     static final int GRACE_PERIOD_SECONDS = 2;
@@ -56,6 +64,9 @@ class RoomApiIT {
 
     @LocalServerPort
     private int port;
+
+    @LocalManagementPort
+    private int managementPort;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -390,6 +401,35 @@ class RoomApiIT {
                 assertTrue(rooms.isEmpty());
             }
         }
+    }
+
+    @Test
+    @DisplayName("Activity metrics are served on the management port only")
+    void activityMetrics() throws Exception {
+        RoomDto room = createRoom(dmitry, "Sprint", List.of("1"), new ParticipantDto("Dmitry", false));
+        alex.send("/app/room/" + room.getId() + "/join", new ParticipantDto("Alex", true));
+        dmitry.send("/app/room/" + room.getId() + "/vote", new VoteDto("Dmitry", "1"));
+
+        // The counters keep what the other tests did, so only the gauges have exact values
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            HttpResponse<String> metrics = get(managementPort, "/actuator/prometheus");
+            assertEquals(200, metrics.statusCode());
+            assertAll(
+                    () -> assertTrue(metrics.body().contains("pipoker_rooms 1.0"), "rooms now"),
+                    () -> assertTrue(metrics.body().contains("pipoker_people_online 2.0"), "people online"),
+                    () -> assertTrue(metrics.body().contains("pipoker_rooms_created_total "), "rooms created"),
+                    () -> assertTrue(metrics.body().contains("pipoker_participants_joined_total{role=\"watcher\"}"), "joined"),
+                    () -> assertTrue(metrics.body().contains("pipoker_votes_total "), "votes"),
+                    () -> assertTrue(metrics.body().contains("pipoker_connections_total "), "connections")
+            );
+        });
+        // The public port, which the proxy forwards, has no metrics
+        assertEquals(404, get(port, "/actuator/prometheus").statusCode());
+    }
+
+    private static HttpResponse<String> get(int port, String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).build();
+        return HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private RoomDto createRoom(StompTestClient client, String name, List<String> cards, ParticipantDto... participants)

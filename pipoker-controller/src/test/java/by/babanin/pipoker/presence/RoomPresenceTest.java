@@ -32,6 +32,8 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import by.babanin.pipoker.activity.LeaveReason;
+import by.babanin.pipoker.activity.RoomActivity;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
@@ -50,6 +52,7 @@ class RoomPresenceTest {
 
     private RoomService roomService;
     private SimpMessageSendingOperations messagingTemplate;
+    private RoomActivity activity;
     private FakeScheduler scheduler;
     private RoomPresence presence;
     private Room room;
@@ -58,13 +61,14 @@ class RoomPresenceTest {
     void setUp() {
         roomService = mock(RoomService.class);
         messagingTemplate = mock(SimpMessageSendingOperations.class);
+        activity = mock(RoomActivity.class);
         scheduler = new FakeScheduler();
         ModelMapper modelMapper = mock(ModelMapper.class);
         when(modelMapper.map(any(Participant.class), eq(ParticipantDto.class))).thenAnswer(invocation -> {
             Participant participant = invocation.getArgument(0);
             return new ParticipantDto(participant.getNickname(), participant.isWatcher());
         });
-        presence = new RoomPresence(roomService, modelMapper, messagingTemplate, scheduler, GRACE_PERIOD, STARTUP_GRACE_PERIOD);
+        presence = new RoomPresence(roomService, modelMapper, messagingTemplate, activity, scheduler, GRACE_PERIOD, STARTUP_GRACE_PERIOD);
 
         Deck deck = new Deck();
         deck.add("1");
@@ -94,6 +98,7 @@ class RoomPresenceTest {
         assertFalse(room.containsParticipant("Alex"));
         verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
                 new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
+        verify(activity).left(LeaveReason.PAGE_CLOSED);
         // A refreshed page can't take the seat back either
         assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
     }
@@ -127,6 +132,7 @@ class RoomPresenceTest {
         assertFalse(room.containsParticipant("Alex"));
         verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
                 new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
+        verify(activity).left(LeaveReason.CONNECTION_LOST);
     }
 
     @Test
@@ -247,6 +253,7 @@ class RoomPresenceTest {
         scheduler.advance(LATER);
 
         verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
+        verify(activity, never()).left(any());
     }
 
     @Test
@@ -264,6 +271,7 @@ class RoomPresenceTest {
 
         assertTrue(room.containsParticipant("Dmitry"));
         assertFalse(room.containsParticipant("Alex"));
+        verify(activity).left(LeaveReason.RESTART);
     }
 
     @Test
@@ -278,6 +286,25 @@ class RoomPresenceTest {
         scheduler.advance(LATER);
         assertTrue(room.containsParticipant("Dmitry"));
         assertFalse(room.containsParticipant("Alex"));
+    }
+
+    @Test
+    @DisplayName("Only people with an open connection are online")
+    void peopleOnline() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "first-tab");
+        presence.returnTo(room.getId(), "Alex", "second-tab");
+        assertEquals(2, presence.peopleOnline());
+
+        presence.disconnected(disconnect("first-tab", CloseStatus.NORMAL));
+        assertEquals(2, presence.peopleOnline());
+
+        // Waiting for Dmitry to come back
+        presence.disconnected(disconnect("dmitry-tab", CloseStatus.NO_CLOSE_FRAME));
+        assertEquals(1, presence.peopleOnline());
+
+        presence.forget(room.getId(), "Alex");
+        assertEquals(0, presence.peopleOnline());
     }
 
     private static SessionDisconnectEvent disconnect(String sessionId, CloseStatus closeStatus) {
