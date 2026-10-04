@@ -4,7 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.StringJoiner;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;

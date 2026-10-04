@@ -21,7 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalManagementPort;
@@ -31,7 +31,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import by.babanin.pipoker.IntegrationTestContainers;
 import by.babanin.pipoker.entity.Room;
@@ -53,7 +53,7 @@ import by.babanin.pipoker.util.StompTestClient;
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, properties = "presence.grace-period=" + RoomApiIT.GRACE_PERIOD_SECONDS + "s")
 @ActiveProfiles("prod")
 // Serves the metrics the way the production backend does, tests leave them out otherwise
-@AutoConfigureObservability(tracing = false)
+@AutoConfigureMetrics
 class RoomApiIT {
 
     static final int GRACE_PERIOD_SECONDS = 2;
@@ -70,7 +70,7 @@ class RoomApiIT {
     private int managementPort;
 
     @Autowired
-    private ObjectMapper objectMapper;
+    private JsonMapper jsonMapper;
 
     @Autowired
     private RoomRepository roomRepository;
@@ -539,6 +539,6 @@ class RoomApiIT {
     }
 
     private StompTestClient connectClient() throws Exception {
-        return new StompTestClient(String.format("http://localhost:%d/ws", port), objectMapper);
+        return new StompTestClient(String.format("http://localhost:%d/ws", port), jsonMapper);
     }
 }

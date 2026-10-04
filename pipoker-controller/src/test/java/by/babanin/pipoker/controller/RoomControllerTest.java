@@ -22,7 +22,7 @@ import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
@@ -54,8 +54,8 @@ import by.babanin.pipoker.util.TestStompSession;
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 /*@DataMongoTest*/
 /*@TestPropertySource(properties = {
-        "spring.data.mongodb.uuid-representation=standard",
-        "spring.data.mongodb.port=27019",
+        "spring.mongodb.representation.uuid=standard",
+        "spring.mongodb.port=27019",
 })*/
 @ActiveProfiles({ "test" })
 @Import(TestWebSocketConfig.class)
@@ -64,13 +64,13 @@ class RoomControllerTest {
     @LocalServerPort
     private Integer port;
 
-    @MockBean
+    @MockitoBean
     private RoomService roomService;
 
-    @MockBean
+    @MockitoBean
     private RoomPresence roomPresence;
 
-    @MockBean
+    @MockitoBean
     private RoomActivity activity;
 
     @Autowired

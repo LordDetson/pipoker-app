@@ -29,7 +29,7 @@ To start using PiPoker API, refer to our comprehensive [documentation](#). It pr
 
 ## Tests
 `./mvnw verify` runs all tests and writes coverage reports to `*/target/site/jacoco`.
-- Unit tests (`*Test`) need nothing but Java: `./mvnw test`.
+- Unit tests (`*Test`) need nothing but Java 25: `./mvnw test`.
 - Integration tests (`*IT`) start MongoDB and RabbitMQ in Docker with Testcontainers and drive the application over STOMP the way the web client does. They need a running Docker; skip them with `./mvnw verify -DskipITs`.
 
 ## Contributing
