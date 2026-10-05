@@ -44,6 +44,7 @@ import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
 import by.babanin.pipoker.presence.SeatLocks;
+import by.babanin.pipoker.service.RoleChange;
 import by.babanin.pipoker.service.RoomService;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Valid;
@@ -127,6 +128,22 @@ public class RoomController {
             roomPresence.forget(roomId, nickname);
             modelMapper.validate();
             tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, result));
+        });
+    }
+
+    // Like joining, the change is told to the room while the person's seat lock is held
+    @MessageMapping("/{roomId}/participants/role")
+    void changeRole(@DestinationVariable UUID roomId, @Valid ParticipantDto participantDto) {
+        String nickname = participantDto.getNickname();
+        seatLocks.change(roomId, nickname, () -> {
+            RoleChange change = roomService.changeRole(roomId, nickname, participantDto.isWatcher());
+            activity.roleChanged(change.participant().isWatcher());
+            if(change.takenBackVote() != null) {
+                tellRoom(new RoomEvent(roomId, EventType.VOTE_REMOVED, modelMapper.map(change.takenBackVote(), VoteDto.class)));
+            }
+            ParticipantDto result = modelMapper.map(change.participant(), ParticipantDto.class);
+            modelMapper.validate();
+            tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_ROLE_CHANGED, result));
         });
     }
 

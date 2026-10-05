@@ -30,6 +30,11 @@ public class RoomEvent {
         PARTICIPANT_ADDED,
         PARTICIPANT_REMOVED,
         PARTICIPANT_RETURNED,
+        /**
+         * Someone became a watcher or a voter. A voter who became a watcher before the cards were revealed loses
+         * their vote, which comes as VOTE_REMOVED right before this event.
+         */
+        PARTICIPANT_ROLE_CHANGED,
         VOTE_ADDED,
         VOTE_REMOVED,
         CLEAR_VOTES,

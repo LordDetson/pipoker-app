@@ -154,6 +154,18 @@ public class Room {
         return participant;
     }
 
+    /**
+     * Makes the participant a watcher or a voter. A voter who becomes a watcher before the cards are revealed takes
+     * their vote back, while a revealed vote stays with its round. A watcher who becomes a voter can vote in this round
+     * until its cards are revealed.
+     *
+     * @return the vote taken back, empty when there was none to take back
+     */
+    public Optional<Vote> changeRole(String nickname, boolean watcher) {
+        getParticipant(nickname).setWatcher(watcher);
+        return watcher && !votesShown ? removeVote(nickname) : Optional.empty();
+    }
+
     public void clearParticipants() {
         clearVotes();
         participants.clear();

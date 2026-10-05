@@ -177,6 +177,22 @@ public class RoomService {
     }
 
     /**
+     * Makes the participant a watcher or a voter. A voter who becomes a watcher before the cards are revealed takes
+     * their vote back.
+     */
+    public RoleChange changeRole(UUID roomId, String nickname, boolean watcher) {
+        String key = Participant.normalizeNickname(nickname);
+        Room before = roomRepository.changeRole(roomId, key, watcher).orElseThrow(() -> {
+            checkExists(roomId);
+            return new ConstraintException(ErrorCode.PARTICIPANT_NOT_FOUND,
+                    String.format("Participant \"%s\" is not found in the room \"%s\"", nickname, roomId));
+        });
+        // The room as it was makes the same decision the update made
+        Vote takenBack = before.changeRole(key, watcher).orElse(null);
+        return new RoleChange(before.getParticipant(key), takenBack);
+    }
+
+    /**
      * Deletes the room if nobody is left in it, so someone joining at the same moment keeps the room.
      * A deleted room is announced with {@link RoomRemovedEvent}.
      */

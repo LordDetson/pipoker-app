@@ -53,6 +53,7 @@ import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.InvalidDataException;
 import by.babanin.pipoker.exception.RoomServiceException;
+import by.babanin.pipoker.exception.VoteServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
 
 /**
@@ -382,6 +383,44 @@ class RoomServiceIT {
         // A room stored before the task was kept starts the next round without one
         roomService.clearVotes(roomId);
         assertNull(roomService.get(roomId).getTask());
+    }
+
+    @Test
+    @DisplayName("A voter who becomes a watcher before the reveal loses the vote, a revealed vote stays with its round")
+    void changeRole() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("$Dmitry"))).getId();
+        roomService.addParticipant(roomId, "Alex");
+        roomService.addVote(roomId, "$Dmitry", "1");
+        roomService.addVote(roomId, "Alex", "1");
+
+        // When
+        RoleChange watcher = roomService.changeRole(roomId, "$DMITRY", true);
+
+        // Then
+        assertTrue(watcher.participant().isWatcher());
+        assertEquals("1", watcher.takenBackVote().getCard().getValue());
+        Room stored = roomService.get(roomId);
+        assertTrue(stored.getParticipant("$Dmitry").isWatcher());
+        assertTrue(stored.findVote("$Dmitry").isEmpty());
+        assertTrue(stored.findVote("Alex").isPresent());
+        assertThrows(VoteServiceException.class, () -> roomService.addVote(roomId, "$Dmitry", "1"));
+
+        // When
+        RoleChange voter = roomService.changeRole(roomId, "$Dmitry", false);
+        roomService.addVote(roomId, "$Dmitry", "1");
+        roomService.showVotes(roomId);
+        RoleChange afterReveal = roomService.changeRole(roomId, "Alex", true);
+
+        // Then
+        assertFalse(voter.participant().isWatcher());
+        assertNull(afterReveal.takenBackVote());
+        Room revealed = roomService.get(roomId);
+        assertTrue(revealed.getParticipant("Alex").isWatcher());
+        assertEquals(2, revealed.getVotes().size());
+        assertEquals(2, revealed.getHistory().getFirst().getVotes().size());
+        assertThrows(ConstraintException.class, () -> roomService.changeRole(roomId, "Bob", true));
+        assertThrows(RoomServiceException.class, () -> roomService.changeRole(UUID.randomUUID(), "Alex", true));
     }
 
     @Test

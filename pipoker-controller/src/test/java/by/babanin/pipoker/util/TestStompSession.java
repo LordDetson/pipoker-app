@@ -83,7 +83,7 @@ public class TestStompSession<T> {
         public TestStompSession<T> build() throws ExecutionException, InterruptedException, TimeoutException {
             StompSession stompSession = stompClient.connectAsync(brokerUrl, new StompSessionHandlerAdapter() {})
                     .get(timeout, timeUnit);
-            Queue<T> results = new ArrayBlockingQueue<>(1);
+            Queue<T> results = new ArrayBlockingQueue<>(resultCapacity);
             stompSession.subscribe(destination, new ResultAccumulator<>(resultType, results));
             return new TestStompSession<>(stompSession, results);
         }
