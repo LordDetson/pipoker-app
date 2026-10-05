@@ -18,6 +18,7 @@ import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Task;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
@@ -239,10 +240,52 @@ public class RoomService {
         return before.showVotes(revealedAt);
     }
 
-    public void clearVotes(UUID roomId) {
-        if(!roomRepository.clearVotes(roomId)) {
-            throw notFound(roomId);
+    /**
+     * Starts a new round: no votes, cards hidden, no timer.
+     *
+     * @return the task of the new round: the same one when the team votes on it again, null when the previous round
+     * got its estimate or had no task
+     */
+    public Task clearVotes(UUID roomId) {
+        return roomRepository.clearVotes(roomId).orElseThrow(() -> notFound(roomId)).getTask();
+    }
+
+    // Task and estimate
+
+    /**
+     * Names what the current round estimates. Anyone in the room can change it while the cards are hidden.
+     *
+     * @param name blank to estimate nothing named
+     * @param url blank when the task has no link
+     * @return the task, null when the name is blank
+     */
+    public Task setTask(UUID roomId, String name, String url) {
+        Task task = Task.of(name, url);
+        if(task != null) {
+            AppUtils.validateAndThrow(validator, task, InvalidDataException::new);
         }
+        if(!roomRepository.setTask(roomId, task)) {
+            checkExists(roomId);
+            throw new RoomServiceException(ErrorCode.CARDS_REVEALED,
+                    "The cards are revealed, so the task can change in the next round");
+        }
+        return task;
+    }
+
+    /**
+     * Accepts the estimate the team agreed on for the round whose cards are revealed now: any card of the deck.
+     *
+     * @param revealedAt when the round was revealed, as the room's history tells it
+     * @return the round with the estimate
+     */
+    public Round acceptEstimate(UUID roomId, Instant revealedAt, String cardValue) {
+        // The deck explains a card it doesn't have, and gives the card as the deck writes it
+        String estimate = get(roomId).getDeck().get(cardValue).getValue();
+        return roomRepository.acceptEstimate(roomId, revealedAt, estimate).orElseThrow(() -> {
+            checkExists(roomId);
+            return new RoomServiceException(ErrorCode.ROUND_NOT_REVEALED,
+                    String.format("The round revealed at %s is not on the table of the room \"%s\"", revealedAt, roomId));
+        });
     }
 
     // Timer

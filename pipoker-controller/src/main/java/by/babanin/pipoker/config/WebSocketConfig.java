@@ -44,6 +44,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
+        // A page hears the events of its room in the order they happened. Otherwise the messages RabbitMQ sends
+        // one after another go out to the browser on different threads, and a page can hear that someone became
+        // a watcher before it hears that their vote was taken back.
+        registry.setPreservePublishOrder(true);
         registry.setApplicationDestinationPrefixes(brokerAppDestinationPrefixes)
                 .enableStompBrokerRelay(PiPokerApplication.TOPIC_DESTINATION_PREFIX)
                 .setRelayHost(brokerHost)

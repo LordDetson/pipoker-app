@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoundDto;
+import by.babanin.pipoker.model.TaskDto;
 import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 import jakarta.validation.constraints.NotNull;
@@ -47,6 +48,14 @@ public class RoomEvent {
          */
         TIMER_STOPPED,
         /**
+         * Someone named what the current round estimates, or cleared it.
+         */
+        TASK_CHANGED,
+        /**
+         * Someone accepted the estimate of the revealed round, in place of the one accepted before.
+         */
+        ESTIMATE_ACCEPTED,
+        /**
          * The room was closed because nobody did anything in it for long, and everyone left it.
          */
         ROOM_CLOSED,
@@ -67,29 +76,38 @@ public class RoomEvent {
 
     private VoteDto vote;
 
-    // SHOW_VOTES: the round that entered the room's history, none when the cards were already revealed
+    // SHOW_VOTES: the round that entered the room's history, none when the cards were already revealed.
+    // ESTIMATE_ACCEPTED: the round with its estimate.
     private RoundDto round;
 
     // TIMER_STARTED: the timer that was started
     private TimerDto timer;
 
+    // TASK_CHANGED: the task of the current round, none when it was cleared.
+    // CLEAR_VOTES: the task of the new round, none when the previous round got its estimate or had no task.
+    private TaskDto task;
+
     public RoomEvent(UUID roomId, EventType eventType) {
-        this(roomId, eventType, null, null, null, null);
+        this(roomId, eventType, null, null, null, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, ParticipantDto participant) {
-        this(roomId, eventType, participant, null, null, null);
+        this(roomId, eventType, participant, null, null, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, VoteDto vote) {
-        this(roomId, eventType, null, vote, null, null);
+        this(roomId, eventType, null, vote, null, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, TimerDto timer) {
-        this(roomId, eventType, null, null, null, timer);
+        this(roomId, eventType, null, null, null, timer, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, RoundDto round) {
-        this(roomId, eventType, null, null, round, null);
+        this(roomId, eventType, null, null, round, null, null);
+    }
+
+    public RoomEvent(UUID roomId, EventType eventType, TaskDto task) {
+        this(roomId, eventType, null, null, null, null, task);
     }
 }

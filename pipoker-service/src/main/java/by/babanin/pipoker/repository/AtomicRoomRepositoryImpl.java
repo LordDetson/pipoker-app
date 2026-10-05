@@ -9,13 +9,17 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.bson.Document;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.AggregationUpdate;
+import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Task;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 
@@ -27,9 +31,12 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     private static final String VOTES_SHOWN = "votesShown";
     private static final String LAST_ACTIVITY = "lastActivity";
     private static final String TIMER = "timer";
+    private static final String TASK = "task";
     private static final String HISTORY = "history";
     private static final String ROUND_REVEALED_AT = "revealedAt";
     private static final String ROUND_VOTES = "votes";
+    private static final String ROUND_TASK = "task";
+    private static final String ROUND_ESTIMATE = "estimate";
     private static final String PARTICIPANT_KEY = "key";
     private static final String PARTICIPANT_WATCHER = "watcher";
     private static final String VOTE_KEY = "participant.key";
@@ -142,7 +149,8 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
         // Every expression of the $set stage reads the room as it was before it, like Room#showVotes does
         Document votes = new Document("$ifNull", List.of("$" + VOTES, List.of()));
         Document history = new Document("$ifNull", List.of("$" + HISTORY, List.of()));
-        Document round = new Document(ROUND_REVEALED_AT, revealedAt).append(ROUND_VOTES, votes);
+        // A room without a task records a round without one: a missing field stays missing in a new document
+        Document round = new Document(ROUND_REVEALED_AT, revealedAt).append(ROUND_VOTES, votes).append(ROUND_TASK, "$" + TASK);
         Document notRecorded = new Document("$or", List.of(
                 new Document("$eq", List.of("$" + VOTES_SHOWN, true)),
                 new Document("$eq", List.of(new Document("$size", votes), 0))));
@@ -158,10 +166,48 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     }
 
     @Override
-    public boolean clearVotes(UUID roomId) {
-        Update update = new Update().set(VOTES, List.of()).set(VOTES_SHOWN, false).unset(TIMER)
+    public Optional<Room> clearVotes(UUID roomId) {
+        // Reads the room as it was, like Room#clearVotes does: the task goes once the revealed round got its estimate
+        // An estimate is a card value, never empty, so a missing one alone counts as false
+        Document estimated = new Document("$and", List.of(
+                new Document("$eq", List.of("$" + VOTES_SHOWN, true)),
+                new Document("$ifNull", List.of(lastRound(ROUND_ESTIMATE), false))));
+        AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", new Document(VOTES, List.of())
+                .append(VOTES_SHOWN, false)
+                .append(TIMER, "$$REMOVE")
+                .append(TASK, new Document("$cond", List.of(estimated, "$$REMOVE", "$" + TASK)))
+                .append(LAST_ACTIVITY, Instant.now()))));
+        // Returns the room after the update, which tells the task the new round has
+        return Optional.ofNullable(mongoTemplate.findAndModify(query(where("id").is(roomId)), update,
+                FindAndModifyOptions.options().returnNew(true), Room.class));
+    }
+
+    @Override
+    public boolean setTask(UUID roomId, Task task) {
+        Query room = query(where("id").is(roomId).and(VOTES_SHOWN).ne(true));
+        Update update = task == null ? new Update().unset(TASK) : new Update().set(TASK, toDocument(task));
+        update.set(LAST_ACTIVITY, Instant.now());
+        return mongoTemplate.updateFirst(room, update, Room.class).getMatchedCount() == 1;
+    }
+
+    @Override
+    public Optional<Round> acceptEstimate(UUID roomId, Instant revealedAt, String estimate) {
+        // The round must still be on the table: the cards are revealed and it is the last round of the history
+        Query room = query(where("id").is(roomId).and(VOTES_SHOWN).is(true)
+                .andOperator(Criteria.expr(() -> new Document("$eq", List.of(lastRound(ROUND_REVEALED_AT), revealedAt)))));
+        Update update = new Update()
+                .set(HISTORY + ".$[round]." + ROUND_ESTIMATE, estimate)
+                .filterArray(where("round." + ROUND_REVEALED_AT).is(revealedAt))
                 .set(LAST_ACTIVITY, Instant.now());
-        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
+        Room after = mongoTemplate.findAndModify(room, update, FindAndModifyOptions.options().returnNew(true), Room.class);
+        return Optional.ofNullable(after).map(changed -> changed.getHistory().getLast());
+    }
+
+    // A field of the last round of the history, null when the history is empty or missing
+    private static Document lastRound(String field) {
+        return new Document("$let", new Document("vars",
+                new Document("last", new Document("$arrayElemAt", List.of("$" + HISTORY, -1))))
+                .append("in", "$$last." + field));
     }
 
     @Override

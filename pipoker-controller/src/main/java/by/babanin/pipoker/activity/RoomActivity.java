@@ -31,6 +31,8 @@ public class RoomActivity {
     private final Counter reveals;
     private final Counter clears;
     private final Counter timers;
+    private final Counter tasks;
+    private final Counter estimates;
     private final Map<LeaveReason, Counter> leaves = new EnumMap<>(LeaveReason.class);
 
     public RoomActivity(MeterRegistry registry) {
@@ -66,6 +68,12 @@ public class RoomActivity {
                 .register(registry);
         timers = Counter.builder("pipoker.timers.started")
                 .description("Times the discussion timer was started")
+                .register(registry);
+        tasks = Counter.builder("pipoker.tasks.named")
+                .description("Times someone named the task of a round, including changed names")
+                .register(registry);
+        estimates = Counter.builder("pipoker.estimates.accepted")
+                .description("Times someone accepted the estimate of a round, including changed estimates")
                 .register(registry);
     }
 
@@ -108,6 +116,14 @@ public class RoomActivity {
 
     public void timerStarted() {
         timers.increment();
+    }
+
+    public void taskNamed() {
+        tasks.increment();
+    }
+
+    public void estimateAccepted() {
+        estimates.increment();
     }
 
     private static Counter joined(MeterRegistry registry, String role) {

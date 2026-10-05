@@ -57,4 +57,7 @@ public class RoomDto {
 
     // The discussion timer, left out of the JSON when nobody has started one in this round
     private TimerDto timer;
+
+    // What the current round estimates, left out when nobody has named it
+    private TaskDto task;
 }

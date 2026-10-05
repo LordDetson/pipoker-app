@@ -6,6 +6,8 @@ import java.util.UUID;
 
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Task;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 
@@ -15,7 +17,8 @@ import by.babanin.pipoker.entity.Vote;
  * that would overwrite whatever someone else changed in between.
  * <p>
  * The changes someone makes on purpose also mark the room as active (see {@link Room#getLastActivity()}): joining,
- * changing the role, voting, taking a vote back, revealing the cards, starting a new round and starting or stopping the timer. Leaving and coming back after a refresh
+ * changing the role, voting, taking a vote back, revealing the cards, starting a new round, starting or stopping the
+ * timer, naming the task and accepting the estimate. Leaving and coming back after a refresh
  * or a lost connection don't, so a room where open pages merely stay connected is still idle.
  */
 public interface AtomicRoomRepository {
@@ -84,8 +87,8 @@ public interface AtomicRoomRepository {
 
     /**
      * Reveals the cards of the current round and stops its timer. The first time a round with votes is revealed,
-     * it enters the history in the same update (see {@link Room#showVotes}), so two people revealing it at once
-     * record it once.
+     * it enters the history with its task in the same update (see {@link Room#showVotes}), so two people revealing
+     * it at once record it once.
      *
      * @param revealedAt when the round enters the history
      * @return the room as it was before, empty when the room is missing
@@ -93,11 +96,29 @@ public interface AtomicRoomRepository {
     Optional<Room> showVotes(UUID roomId, Instant revealedAt);
 
     /**
-     * Starts a new round: no votes, cards hidden, no timer.
+     * Starts a new round: no votes, cards hidden, no timer, and no task once the previous round got its estimate
+     * (see {@link Room#clearVotes}).
      *
-     * @return false when the room is missing
+     * @return the room as it is after the update, empty when the room is missing
      */
-    boolean clearVotes(UUID roomId);
+    Optional<Room> clearVotes(UUID roomId);
+
+    /**
+     * Names what the current round estimates, unless the cards are revealed.
+     *
+     * @param task null to estimate nothing named
+     * @return false when the room is missing or its cards are revealed
+     */
+    boolean setTask(UUID roomId, Task task);
+
+    /**
+     * Accepts the estimate of the round whose cards are revealed now, in place of the one accepted before
+     * (see {@link Room#acceptEstimate}).
+     *
+     * @param revealedAt when the round was revealed
+     * @return the round with the estimate, empty when the room is missing or that round is not on its table anymore
+     */
+    Optional<Round> acceptEstimate(UUID roomId, Instant revealedAt, String estimate);
 
     /**
      * Starts the discussion timer in place of the one that may be running, unless the cards are revealed.
