@@ -15,7 +15,7 @@ import by.babanin.pipoker.entity.Vote;
  * that would overwrite whatever someone else changed in between.
  * <p>
  * The changes someone makes on purpose also mark the room as active (see {@link Room#getLastActivity()}): joining,
- * voting, taking a vote back, revealing the cards, starting a new round and starting or stopping the timer. Leaving and coming back after a refresh
+ * changing the role, voting, taking a vote back, revealing the cards, starting a new round and starting or stopping the timer. Leaving and coming back after a refresh
  * or a lost connection don't, so a room where open pages merely stay connected is still idle.
  */
 public interface AtomicRoomRepository {
@@ -40,6 +40,15 @@ public interface AtomicRoomRepository {
      * no such participant
      */
     Optional<Room> removeParticipant(UUID roomId, String key);
+
+    /**
+     * Makes the participant a watcher or a voter. A voter who becomes a watcher before the cards are revealed loses
+     * their vote in the same update (see {@link Room#changeRole}), so a reveal at the same moment either counts the vote
+     * or doesn't, and never keeps a vote of a watcher in a hidden round.
+     *
+     * @return the room as it was before, empty when the room is missing or has no such participant
+     */
+    Optional<Room> changeRole(UUID roomId, String key, boolean watcher);
 
     /**
      * Deletes the room only if nobody is left in it, so someone joining at the same moment keeps the room.

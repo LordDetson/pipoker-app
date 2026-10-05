@@ -57,6 +57,7 @@ import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
 import by.babanin.pipoker.presence.SeatLocks;
+import by.babanin.pipoker.service.RoleChange;
 import by.babanin.pipoker.service.RoomService;
 import by.babanin.pipoker.util.TestStompSession;
 
@@ -319,6 +320,57 @@ class RoomControllerTest {
         // Then
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.VOTE_REMOVED, expectedResult), results.poll()));
+    }
+
+    @Test
+    void changeRoleToWatcherTakesVoteBack() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Participant watcher = Participant.createWatcher("Dmitry");
+        Vote vote = new Vote(Participant.createParticipant("Dmitry"), new Card("1d"));
+        Mockito.when(roomService.changeRole(roomId, "Dmitry", true))
+                .thenReturn(new RoleChange(watcher, vote));
+
+        // When
+        String destination = String.format("/%s/participants/role", roomId);
+        Queue<RoomEvent> results = TestStompSession.<RoomEvent>builder()
+                .stompClient(webSocketStompClient)
+                .brokerUrl(String.format(TestWebSocketConfig.URL_FORMAT, port))
+                .destination(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + "." + roomId)
+                .resultType(RoomEvent.class)
+                .resultCapacity(2)
+                .build()
+                .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
+                        new ParticipantDto("Dmitry", true));
+
+        // Then
+        // The vote goes first, so nobody sees a watcher with a vote in a hidden round
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(List.of(
+                        new RoomEvent(roomId, EventType.VOTE_REMOVED, new VoteDto("Dmitry", "1d")),
+                        new RoomEvent(roomId, EventType.PARTICIPANT_ROLE_CHANGED, new ParticipantDto("Dmitry", true))
+                ), List.copyOf(results)));
+        Mockito.verify(activity).roleChanged(true);
+    }
+
+    @Test
+    void changeRoleToVoter() throws Exception {
+        // Given
+        UUID roomId = UUID.randomUUID();
+        Mockito.when(roomService.changeRole(roomId, "Dmitry", false))
+                .thenReturn(new RoleChange(Participant.createParticipant("Dmitry"), null));
+
+        // When
+        String destination = String.format("/%s/participants/role", roomId);
+        Queue<RoomEvent> results = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
+                .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
+                        new ParticipantDto("Dmitry", false));
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS)
+                .untilAsserted(() -> assertEquals(
+                        new RoomEvent(roomId, EventType.PARTICIPANT_ROLE_CHANGED, new ParticipantDto("Dmitry", false)), results.poll()));
+        Mockito.verify(activity).roleChanged(false);
     }
 
     @Test

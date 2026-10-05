@@ -31,6 +31,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     private static final String ROUND_REVEALED_AT = "revealedAt";
     private static final String ROUND_VOTES = "votes";
     private static final String PARTICIPANT_KEY = "key";
+    private static final String PARTICIPANT_WATCHER = "watcher";
     private static final String VOTE_KEY = "participant.key";
 
     private final MongoTemplate mongoTemplate;
@@ -66,6 +67,31 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
                 .pull(PARTICIPANTS, new Document(PARTICIPANT_KEY, key))
                 .pull(VOTES, new Document(VOTE_KEY, key));
         // Returns the room as it was before the update, which still has the participant
+        return Optional.ofNullable(mongoTemplate.findAndModify(room, update, Room.class));
+    }
+
+    @Override
+    public Optional<Room> changeRole(UUID roomId, String key, boolean watcher) {
+        Query room = query(where("id").is(roomId).and(PARTICIPANTS + "." + PARTICIPANT_KEY).is(key));
+        // $literal keeps values like a nickname starting with $ from being read as field paths
+        Document literalKey = new Document("$literal", key);
+        Document participants = new Document("$map", new Document("input", "$" + PARTICIPANTS)
+                .append("in", new Document("$cond", List.of(
+                        new Document("$eq", List.of("$$this." + PARTICIPANT_KEY, literalKey)),
+                        new Document("$mergeObjects", List.of("$$this", new Document(PARTICIPANT_WATCHER, watcher))),
+                        "$$this"))));
+        Document changes = new Document(PARTICIPANTS, participants).append(LAST_ACTIVITY, Instant.now());
+        if(watcher) {
+            // Every expression of the $set stage reads the room as it was before it, like Room#changeRole does:
+            // the vote goes only while the cards are hidden
+            Document votes = new Document("$ifNull", List.of("$" + VOTES, List.of()));
+            Document otherVotes = new Document("$filter", new Document("input", votes)
+                    .append("cond", new Document("$ne", List.of("$$this." + VOTE_KEY, literalKey))));
+            changes.append(VOTES, new Document("$cond", List.of(
+                    new Document("$eq", List.of("$" + VOTES_SHOWN, true)), votes, otherVotes)));
+        }
+        AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", changes)));
+        // Returns the room as it was before the update, which tells whether the vote was taken back
         return Optional.ofNullable(mongoTemplate.findAndModify(room, update, Room.class));
     }
 

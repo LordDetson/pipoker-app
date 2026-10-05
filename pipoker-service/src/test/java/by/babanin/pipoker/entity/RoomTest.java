@@ -240,6 +240,53 @@ class RoomTest {
     }
 
     @Test
+    @DisplayName("A voter who becomes a watcher before the reveal takes the vote back and can't vote")
+    void becomeWatcherBeforeReveal() {
+        Room room = new Room("test", deck("1"));
+        room.addParticipant("Dmitry");
+        Vote vote = room.addVote("Dmitry", "1");
+
+        Optional<Vote> takenBack = room.changeRole("DMITRY", true);
+
+        assertAll(
+                () -> assertEquals(Optional.of(vote), takenBack),
+                () -> assertTrue(room.getParticipant("Dmitry").isWatcher()),
+                () -> assertTrue(room.getVotes().isEmpty()),
+                () -> assertThrows(VoteServiceException.class, () -> room.addVote("Dmitry", "1"))
+        );
+    }
+
+    @Test
+    @DisplayName("A voter who becomes a watcher after the reveal leaves the revealed vote with the round")
+    void becomeWatcherAfterReveal() {
+        Room room = new Room("test", deck("1"));
+        room.addParticipant("Dmitry");
+        Vote vote = room.addVote("Dmitry", "1");
+        room.showVotes(Instant.now());
+
+        Optional<Vote> takenBack = room.changeRole("Dmitry", true);
+
+        assertTrue(takenBack.isEmpty());
+        assertTrue(room.getParticipant("Dmitry").isWatcher());
+        assertEquals(List.of(vote), List.copyOf(room.getVotes()));
+    }
+
+    @Test
+    @DisplayName("A watcher who becomes a voter can vote")
+    void becomeVoter() {
+        Room room = new Room("test", deck("1"));
+        room.addWatcher("Dmitry");
+
+        Optional<Vote> takenBack = room.changeRole("Dmitry", false);
+        Vote vote = room.addVote("Dmitry", "1");
+
+        assertTrue(takenBack.isEmpty());
+        assertFalse(room.getParticipant("Dmitry").isWatcher());
+        assertEquals(vote, room.getVote("Dmitry"));
+        assertThrows(ConstraintException.class, () -> room.changeRole("Alex", true));
+    }
+
+    @Test
     @DisplayName("Clearing votes keeps participants")
     void clearVotes() {
         Room room = new Room("test", deck("1"));
