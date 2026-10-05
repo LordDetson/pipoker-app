@@ -32,9 +32,16 @@ public enum ErrorCode {
     CARD_NOT_IN_DECK,
 
     /**
-     * The cards of the round are revealed, so its discussion timer can't start: the next round can have one.
+     * The cards of the round are revealed, so its discussion timer can't start and its task can't change:
+     * the next round can have them.
      */
     CARDS_REVEALED,
+
+    /**
+     * An estimate is accepted only for the round whose cards are revealed now: the cards are hidden yet, or someone
+     * has started a new round meanwhile.
+     */
+    ROUND_NOT_REVEALED,
 
     /**
      * The request breaks a limit the client checks too, such as the length of a nickname or the size of a deck.

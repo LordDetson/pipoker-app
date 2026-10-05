@@ -7,6 +7,7 @@ import org.modelmapper.spi.MappingEngine;
 import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.model.RoundDto;
+import by.babanin.pipoker.model.TaskDto;
 import by.babanin.pipoker.model.VoteDto;
 
 public class RoundToDtoConverter implements Converter<Round, RoundDto> {
@@ -21,6 +22,8 @@ public class RoundToDtoConverter implements Converter<Round, RoundDto> {
                         .sorted(Vote::compareTo)
                         .map(vote -> mappingEngine.map(context.create(vote, VoteDto.class)))
                         .toList())
+                .task(round.getTask() == null ? null : new TaskDto(round.getTask().getName(), round.getTask().getUrl()))
+                .estimate(round.getEstimate())
                 .build();
     }
 }

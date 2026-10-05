@@ -78,6 +78,10 @@ public class Room {
     @Getter
     private Timer timer;
 
+    // What the current round estimates, null when nobody has named it
+    @Getter
+    private Task task;
+
     public Room(String name, Deck deck) {
         this.id = UUID.randomUUID();
         this.name = name;
@@ -200,15 +204,32 @@ public class Room {
         return vote;
     }
 
+    // Task
+
     /**
-     * Reveals the cards of the current round. The first time a round with votes is revealed, it enters the history.
+     * Names what the current round estimates, in place of what it was. People name it while they vote,
+     * so the revealed round keeps the task its votes were for.
+     *
+     * @param task null to estimate nothing named
+     */
+    public void setTask(Task task) {
+        if(votesShown) {
+            throw new ConstraintException(ErrorCode.CARDS_REVEALED,
+                    "The cards are revealed, so the task can change in the next round");
+        }
+        this.task = task;
+    }
+
+    /**
+     * Reveals the cards of the current round. The first time a round with votes is revealed, it enters the history
+     * together with its task.
      *
      * @return the round that entered the history, empty when the cards were already revealed or nobody voted
      */
     public Optional<Round> showVotes(Instant revealedAt) {
         Optional<Round> round = votesShown || votes.isEmpty()
                 ? Optional.empty()
-                : Optional.of(new Round(revealedAt, List.copyOf(votes)));
+                : Optional.of(new Round(revealedAt, List.copyOf(votes), task, null));
         round.ifPresent(added -> {
             history.add(added);
             if(history.size() > HISTORY_LIMIT) {
@@ -221,12 +242,41 @@ public class Room {
         return round;
     }
 
+    /**
+     * Accepts the estimate the team agreed on for the revealed round, in place of the one accepted before.
+     * Only the round on the table can get it: once a new round starts, the previous one is closed.
+     *
+     * @param revealedAt when the round was revealed, which tells it apart from the rounds before it
+     * @return the round with the estimate
+     */
+    public Round acceptEstimate(Instant revealedAt, String cardValue) {
+        Card card = deck.get(cardValue);
+        if(!isRevealed(revealedAt)) {
+            throw new ConstraintException(ErrorCode.ROUND_NOT_REVEALED,
+                    String.format("The round revealed at %s is not on the table of the room \"%s\"", revealedAt, id));
+        }
+        Round accepted = history.getLast().withEstimate(card.getValue());
+        history.set(history.size() - 1, accepted);
+        return accepted;
+    }
+
+    private boolean isRevealed(Instant revealedAt) {
+        return votesShown && !history.isEmpty() && history.getLast().getRevealedAt().equals(revealedAt);
+    }
+
     public List<Round> getHistory() {
         return Collections.unmodifiableList(history);
     }
 
-    // A new round also ends the discussion of the previous one, so its timer stops too
+    /**
+     * Starts a new round. It also ends the discussion of the previous one, so its timer stops too.
+     * Once an estimate is accepted, the team goes on to the next task, so the new round starts without one;
+     * otherwise the team votes on the same task again, and it stays.
+     */
     public void clearVotes() {
+        if(votesShown && !history.isEmpty() && history.getLast().getEstimate() != null) {
+            task = null;
+        }
         votes.clear();
         votesShown = false;
         timer = null;

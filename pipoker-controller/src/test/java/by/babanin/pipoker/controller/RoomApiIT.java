@@ -40,9 +40,12 @@ import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.model.DeckDto;
+import by.babanin.pipoker.model.EstimateDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
+import by.babanin.pipoker.model.RoundDto;
+import by.babanin.pipoker.model.TaskDto;
 import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.repository.RoomRepository;
@@ -278,6 +281,89 @@ class RoomApiIT {
         alex.send(room + "/timer/start", new TimerDto(60, null));
         assertEquals(ErrorCode.CARDS_REVEALED, next(alexErrors).getCode());
         assertNull(alex.request(room, RoomDto.class).getTimer());
+    }
+
+    @Test
+    @DisplayName("Everyone sees the task of the round, and the estimate accepted for it stays in the history")
+    void taskAndEstimate() throws Exception {
+        // Given
+        UUID roomId = createRoom(dmitry, "test", List.of("1", "2", "3"), new ParticipantDto("Dmitry", false)).getId();
+        String room = "/app/room/" + roomId;
+        BlockingQueue<RoomEvent> dmitryEvents = dmitry.subscribe("/topic/room." + roomId, RoomEvent.class);
+        BlockingQueue<RoomEvent> alexEvents = alex.subscribe("/topic/room." + roomId, RoomEvent.class);
+        BlockingQueue<ErrorEvent> alexErrors = alex.subscribe("/user/topic/room.errors", ErrorEvent.class);
+        alex.send(room + "/participants/add", new ParticipantDto("Alex", true));
+        next(dmitryEvents);
+        next(alexEvents);
+
+        // A watcher names the task, with spaces around it trimmed
+        alex.send(room + "/task", new TaskDto("  PIP-25 Task name  ", " https://tinker-nook.atlassian.net/browse/PIP-25 "));
+        TaskDto task = new TaskDto("PIP-25 Task name", "https://tinker-nook.atlassian.net/browse/PIP-25");
+        RoomEvent named = new RoomEvent(roomId, EventType.TASK_CHANGED, task);
+        assertEquals(named, next(dmitryEvents));
+        assertEquals(named, next(alexEvents));
+        assertEquals(task, alex.request(room, RoomDto.class).getTask());
+
+        // A link that isn't a web link is refused
+        alex.send(room + "/task", new TaskDto("PIP-25", "javascript:alert(1)"));
+        assertEquals(ErrorCode.INVALID_DATA, next(alexErrors).getCode());
+        assertEquals(task, alex.request(room, RoomDto.class).getTask());
+
+        // The revealed round keeps the task, which can't change until the next round
+        dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "2"));
+        next(dmitryEvents);
+        next(alexEvents);
+        dmitry.send(room + "/votes/show", "");
+        RoundDto revealed = next(dmitryEvents).getRound();
+        next(alexEvents);
+        assertEquals(task, revealed.getTask());
+        assertNull(revealed.getEstimate());
+        alex.send(room + "/task", new TaskDto("PIP-26", null));
+        assertEquals(ErrorCode.CARDS_REVEALED, next(alexErrors).getCode());
+
+        // Anyone accepts any card of the deck, and can change it
+        alex.send(room + "/estimate", new EstimateDto(revealed.getRevealedAt(), "100"));
+        assertEquals(ErrorCode.CARD_NOT_IN_DECK, next(alexErrors).getCode());
+        alex.send(room + "/estimate", new EstimateDto(revealed.getRevealedAt(), "3"));
+        RoomEvent accepted = next(dmitryEvents);
+        assertEquals(EventType.ESTIMATE_ACCEPTED, accepted.getEventType());
+        assertEquals(new RoundDto(revealed.getRevealedAt(), revealed.getVotes(), task, "3"), accepted.getRound());
+        assertEquals(accepted, next(alexEvents));
+        dmitry.send(room + "/estimate", new EstimateDto(revealed.getRevealedAt(), "2"));
+        assertEquals("2", next(dmitryEvents).getRound().getEstimate());
+        next(alexEvents);
+        assertEquals("2", alex.request(room, RoomDto.class).getHistory().getLast().getEstimate());
+
+        // With the estimate accepted, the next round goes on to the next task
+        dmitry.send(room + "/votes/clear", "");
+        assertEquals(new RoomEvent(roomId, EventType.CLEAR_VOTES), next(dmitryEvents));
+        next(alexEvents);
+        RoomDto state = alex.request(room, RoomDto.class);
+        assertNull(state.getTask());
+        assertEquals(List.of(new RoundDto(revealed.getRevealedAt(), revealed.getVotes(), task, "2")), state.getHistory());
+        // The previous round is closed
+        alex.send(room + "/estimate", new EstimateDto(revealed.getRevealedAt(), "1"));
+        assertEquals(ErrorCode.ROUND_NOT_REVEALED, next(alexErrors).getCode());
+
+        // Without an estimate, the next round votes on the same task again
+        alex.send(room + "/task", new TaskDto("PIP-26", null));
+        assertEquals(new TaskDto("PIP-26", null), next(dmitryEvents).getTask());
+        next(alexEvents);
+        dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "1"));
+        next(dmitryEvents);
+        next(alexEvents);
+        dmitry.send(room + "/votes/show", "");
+        next(dmitryEvents);
+        next(alexEvents);
+        dmitry.send(room + "/votes/clear", "");
+        assertEquals(new RoomEvent(roomId, EventType.CLEAR_VOTES, new TaskDto("PIP-26", null)), next(dmitryEvents));
+        next(alexEvents);
+
+        // A blank name clears the task
+        alex.send(room + "/task", new TaskDto(" ", "https://example.com"));
+        assertEquals(new RoomEvent(roomId, EventType.TASK_CHANGED), next(dmitryEvents));
+        next(alexEvents);
+        assertNull(alex.request(room, RoomDto.class).getTask());
     }
 
     @Test

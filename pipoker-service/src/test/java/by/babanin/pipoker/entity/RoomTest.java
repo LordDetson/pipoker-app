@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import by.babanin.pipoker.exception.ConstraintException;
+import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.VoteServiceException;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -299,6 +300,108 @@ class RoomTest {
         room.showVotes(Instant.now());
 
         assertEquals(List.of(List.of("Dmitry:1"), List.of("Alex:2")), room.getHistory().stream().map(RoomTest::votesOf).toList());
+    }
+
+    @Test
+    @DisplayName("The revealed round keeps its task, which can change only while the cards are hidden")
+    void taskOfRound() {
+        Room room = new Room("test", deck("1", "2"));
+        room.addParticipant("Dmitry");
+        room.setTask(Task.of("PIP-24", null));
+        room.setTask(Task.of(" PIP-25 ", " https://example.com/PIP-25 "));
+        room.addVote("Dmitry", "1");
+
+        Round round = room.showVotes(Instant.now()).orElseThrow();
+
+        Task task = new Task("PIP-25", "https://example.com/PIP-25");
+        assertEquals(task, round.getTask());
+        assertEquals(task, room.getTask());
+        ConstraintException refused = assertThrows(ConstraintException.class, () -> room.setTask(Task.of("PIP-26", null)));
+        assertEquals(ErrorCode.CARDS_REVEALED, refused.getCode());
+        assertEquals(task, room.getTask());
+    }
+
+    @Test
+    @DisplayName("A blank task name means the round estimates nothing named")
+    void blankTask() {
+        assertNull(Task.of(" ", "https://example.com"));
+        assertNull(Task.of(null, null));
+        assertNull(Task.of("PIP-25", " ").getUrl());
+    }
+
+    @Test
+    @DisplayName("Task names and links within the limits are valid, and only web links are")
+    void taskValidation() {
+        assertTrue(validator.validate(Task.of("PIP-25", "https://example.com/browse/PIP-25")).isEmpty());
+        assertTrue(validator.validate(Task.of("x".repeat(Task.MAX_NAME_LENGTH), "HTTP://example.com")).isEmpty());
+        assertFalse(validator.validate(Task.of("x".repeat(Task.MAX_NAME_LENGTH + 1), null)).isEmpty());
+        assertFalse(validator.validate(Task.of("PIP-25", "https://example.com/" + "x".repeat(Task.MAX_URL_LENGTH))).isEmpty());
+        assertFalse(validator.validate(Task.of("PIP-25", "javascript:alert(1)")).isEmpty());
+        assertFalse(validator.validate(Task.of("PIP-25", "example.com")).isEmpty());
+        assertFalse(validator.validate(Task.of("PIP-25", "https://example.com/a b")).isEmpty());
+    }
+
+    @Test
+    @DisplayName("Any card of the deck is accepted as the estimate of the revealed round, and can be changed")
+    void acceptEstimate() {
+        Room room = new Room("test", deck("1", "2", "?"));
+        room.addParticipant("Dmitry");
+        room.addVote("Dmitry", "1");
+        Instant revealedAt = Instant.parse("2026-10-05T12:00:00Z");
+
+        ConstraintException hidden = assertThrows(ConstraintException.class, () -> room.acceptEstimate(revealedAt, "1"));
+        room.showVotes(revealedAt);
+        room.acceptEstimate(revealedAt, "2");
+        Round accepted = room.acceptEstimate(revealedAt, "?");
+
+        assertAll(
+                () -> assertEquals(ErrorCode.ROUND_NOT_REVEALED, hidden.getCode()),
+                () -> assertEquals("?", accepted.getEstimate()),
+                () -> assertEquals(List.of("Dmitry:1"), votesOf(accepted)),
+                () -> assertEquals(List.of(accepted), room.getHistory()),
+                () -> assertEquals(ErrorCode.CARD_NOT_IN_DECK,
+                        assertThrows(ConstraintException.class, () -> room.acceptEstimate(revealedAt, "3")).getCode()),
+                () -> assertEquals(ErrorCode.ROUND_NOT_REVEALED,
+                        assertThrows(ConstraintException.class, () -> room.acceptEstimate(revealedAt.plusSeconds(1), "1")).getCode())
+        );
+    }
+
+    @Test
+    @DisplayName("The previous round is closed for estimates once a new round starts")
+    void acceptEstimateAfterNewRound() {
+        Room room = new Room("test", deck("1"));
+        room.addParticipant("Dmitry");
+        room.addVote("Dmitry", "1");
+        Instant revealedAt = Instant.now();
+        room.showVotes(revealedAt);
+
+        room.clearVotes();
+
+        assertThrows(ConstraintException.class, () -> room.acceptEstimate(revealedAt, "1"));
+        assertNull(room.getHistory().getFirst().getEstimate());
+    }
+
+    @Test
+    @DisplayName("A new round keeps the task to vote on it again, and goes on without it once its estimate is accepted")
+    void taskOfNextRound() {
+        Room room = new Room("test", deck("1"));
+        room.addParticipant("Dmitry");
+        room.setTask(Task.of("PIP-25", null));
+        room.addVote("Dmitry", "1");
+        Instant revealedAt = Instant.now();
+        room.showVotes(revealedAt);
+
+        room.clearVotes();
+
+        assertEquals("PIP-25", room.getTask().getName());
+
+        room.addVote("Dmitry", "1");
+        Instant revealedAgain = revealedAt.plusSeconds(60);
+        room.showVotes(revealedAgain);
+        room.acceptEstimate(revealedAgain, "1");
+        room.clearVotes();
+
+        assertNull(room.getTask());
     }
 
     @Test

@@ -25,6 +25,8 @@ import by.babanin.pipoker.activity.RoomActivity;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Task;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
@@ -32,10 +34,12 @@ import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.PiPokerException;
+import by.babanin.pipoker.model.EstimateDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
 import by.babanin.pipoker.model.RoomDto;
 import by.babanin.pipoker.model.RoundDto;
+import by.babanin.pipoker.model.TaskDto;
 import by.babanin.pipoker.model.TimerDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.presence.RoomPresence;
@@ -164,9 +168,11 @@ public class RoomController {
         // First, so someone who comes back after refreshing the page meanwhile doesn't bring a vote into the new round:
         // either they come back without it, or their vote is cleared with the others
         roomPresence.votesCleared(roomId);
-        roomService.clearVotes(roomId);
+        Task task = roomService.clearVotes(roomId);
         activity.cleared();
-        return new RoomEvent(roomId, EventType.CLEAR_VOTES);
+        TaskDto result = task == null ? null : modelMapper.map(task, TaskDto.class);
+        modelMapper.validate();
+        return new RoomEvent(roomId, EventType.CLEAR_VOTES, result);
     }
 
     @MessageMapping("/{roomId}/votes/show")
@@ -199,6 +205,29 @@ public class RoomController {
     RoomEvent stopTimer(@DestinationVariable UUID roomId) {
         roomService.stopTimer(roomId);
         return new RoomEvent(roomId, EventType.TIMER_STOPPED);
+    }
+
+    // Anyone in the room names what the round estimates while the cards are hidden; a blank name clears it
+    @MessageMapping("/{roomId}/task")
+    @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
+    RoomEvent setTask(@DestinationVariable UUID roomId, TaskDto taskDto) {
+        Task task = roomService.setTask(roomId, taskDto.getName(), taskDto.getUrl());
+        if(task != null) {
+            activity.taskNamed();
+        }
+        TaskDto result = task == null ? null : modelMapper.map(task, TaskDto.class);
+        modelMapper.validate();
+        return new RoomEvent(roomId, EventType.TASK_CHANGED, result);
+    }
+
+    @MessageMapping("/{roomId}/estimate")
+    @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
+    RoomEvent acceptEstimate(@DestinationVariable UUID roomId, @Valid EstimateDto estimateDto) {
+        Round accepted = roomService.acceptEstimate(roomId, estimateDto.getRevealedAt(), estimateDto.getCard());
+        activity.estimateAccepted();
+        RoundDto result = modelMapper.map(accepted, RoundDto.class);
+        modelMapper.validate();
+        return new RoomEvent(roomId, EventType.ESTIMATE_ACCEPTED, result);
     }
 
     @MessageExceptionHandler

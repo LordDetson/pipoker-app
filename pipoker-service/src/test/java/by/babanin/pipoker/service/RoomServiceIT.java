@@ -47,9 +47,11 @@ import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Task;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.ErrorCode;
+import by.babanin.pipoker.exception.InvalidDataException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
 
@@ -309,6 +311,80 @@ class RoomServiceIT {
     }
 
     @Test
+    @DisplayName("The task of the round and its accepted estimate are stored with the round")
+    void taskAndEstimate() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1", "2"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        Task task = roomService.setTask(roomId, " PIP-25 ", "https://example.com/PIP-25");
+        roomService.addVote(roomId, "Dmitry", "1");
+
+        // When
+        Round revealed = roomService.showVotes(roomId).orElseThrow();
+        Round accepted = roomService.acceptEstimate(roomId, revealed.getRevealedAt(), "2");
+
+        // Then
+        assertAll(
+                () -> assertEquals(new Task("PIP-25", "https://example.com/PIP-25"), task),
+                () -> assertEquals(task, revealed.getTask()),
+                () -> assertEquals(new Round(revealed.getRevealedAt(), revealed.getVotes(), task, "2"), accepted),
+                () -> assertEquals(List.of(accepted), roomService.get(roomId).getHistory()),
+                () -> assertEquals(ErrorCode.CARDS_REVEALED,
+                        assertThrows(RoomServiceException.class, () -> roomService.setTask(roomId, "PIP-26", null)).getCode()),
+                () -> assertEquals(ErrorCode.CARD_NOT_IN_DECK,
+                        assertThrows(ConstraintException.class, () -> roomService.acceptEstimate(roomId, revealed.getRevealedAt(), "3")).getCode()),
+                () -> assertEquals(ErrorCode.ROUND_NOT_REVEALED,
+                        assertThrows(RoomServiceException.class, () -> roomService.acceptEstimate(roomId, revealed.getRevealedAt().minusSeconds(1), "1")).getCode()),
+                () -> assertThrows(RoomServiceException.class, () -> roomService.setTask(UUID.randomUUID(), "PIP-25", null)),
+                () -> assertThrows(RoomServiceException.class, () -> roomService.acceptEstimate(UUID.randomUUID(), revealed.getRevealedAt(), "1"))
+        );
+
+        // When the next round starts after the estimate, it goes on to the next task
+        roomService.clearVotes(roomId);
+
+        // Then
+        assertNull(roomService.get(roomId).getTask());
+        assertEquals(ErrorCode.ROUND_NOT_REVEALED,
+                assertThrows(RoomServiceException.class, () -> roomService.acceptEstimate(roomId, revealed.getRevealedAt(), "1")).getCode());
+        assertEquals(List.of(accepted), roomService.get(roomId).getHistory());
+    }
+
+    @Test
+    @DisplayName("Without an accepted estimate the next round votes on the same task again, and a blank name clears it")
+    void taskOfRevote() {
+        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        roomService.setTask(roomId, "PIP-25", null);
+        roomService.addVote(roomId, "Dmitry", "1");
+        roomService.showVotes(roomId);
+
+        roomService.clearVotes(roomId);
+
+        assertEquals(new Task("PIP-25", null), roomService.get(roomId).getTask());
+        assertNull(roomService.setTask(roomId, "  ", "https://example.com"));
+        assertNull(roomService.get(roomId).getTask());
+        assertThrows(InvalidDataException.class, () -> roomService.setTask(roomId, "PIP-25", "javascript:alert(1)"));
+        assertNull(roomService.get(roomId).getTask());
+    }
+
+    @Test
+    @DisplayName("A round without a task, and rounds stored before estimates were kept, take an estimate")
+    void estimateOfOldRound() {
+        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
+        roomService.addVote(roomId, "Dmitry", "1");
+        Round revealed = roomService.showVotes(roomId).orElseThrow();
+        Document stored = mongoTemplate.findById(roomId, Document.class, "room");
+        Document round = stored.getList("history", Document.class).getFirst();
+
+        assertFalse(round.containsKey("task"));
+        assertFalse(round.containsKey("estimate"));
+        assertNull(revealed.getTask());
+        assertEquals("1", roomService.acceptEstimate(roomId, revealed.getRevealedAt(), "1").getEstimate());
+
+        // A room stored before the task was kept starts the next round without one
+        roomService.clearVotes(roomId);
+        assertNull(roomService.get(roomId).getTask());
+    }
+
+    @Test
     @DisplayName("Rejected changes are not stored")
     void rejectedChanges() {
         // Given
@@ -562,6 +638,10 @@ class RoomServiceIT {
         assertMarksActive(roomId, () -> roomService.clearVotes(roomId));
         assertMarksActive(roomId, () -> roomService.startTimer(roomId, Duration.ofMinutes(1)));
         assertMarksActive(roomId, () -> roomService.stopTimer(roomId));
+        assertMarksActive(roomId, () -> roomService.setTask(roomId, "PIP-25", null));
+        assertMarksActive(roomId, () -> roomService.addVote(roomId, "Dmitry", "1"));
+        Round revealed = roomService.showVotes(roomId).orElseThrow();
+        assertMarksActive(roomId, () -> roomService.acceptEstimate(roomId, revealed.getRevealedAt(), "1"));
 
         Instant past = Instant.now().minus(Duration.ofHours(1));
         setLastActivity(roomId, past);

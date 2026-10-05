@@ -31,6 +31,7 @@ import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
+import by.babanin.pipoker.entity.Task;
 import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.exception.ConstraintException;
@@ -638,13 +639,15 @@ public class RoomServiceTest {
     }
 
     @Test
-    @DisplayName("Clearing votes")
+    @DisplayName("Clearing votes tells the task of the new round")
     void clearVotes() {
         UUID roomId = UUID.randomUUID();
+        Room cleared = new Room("test", deck("1h"));
+        cleared.setTask(Task.of("PIP-25", null));
         Mockito.when(roomRepository.clearVotes(roomId))
-                .thenReturn(true);
+                .thenReturn(Optional.of(cleared));
 
-        roomService.clearVotes(roomId);
+        assertEquals(new Task("PIP-25", null), roomService.clearVotes(roomId));
 
         Mockito.verify(roomRepository).clearVotes(roomId);
         Mockito.verify(roomRepository, Mockito.never()).existsById(ArgumentMatchers.any());
@@ -687,7 +690,7 @@ public class RoomServiceTest {
     void clearVotesOfMissingRoom() {
         UUID roomId = UUID.randomUUID();
         Mockito.when(roomRepository.clearVotes(roomId))
-                .thenReturn(false);
+                .thenReturn(Optional.empty());
 
         assertThrows(RoomServiceException.class, () -> roomService.clearVotes(roomId));
     }

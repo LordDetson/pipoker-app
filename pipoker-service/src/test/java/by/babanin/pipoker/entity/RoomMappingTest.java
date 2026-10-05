@@ -52,8 +52,10 @@ class RoomMappingTest {
         Room room = new Room("test", deck);
         room.addParticipant("Dmitry");
         room.addWatcher("Alex");
+        room.setTask(Task.of("PIP-25", "https://example.com/PIP-25"));
         room.addVote("Dmitry", "1d");
         room.showVotes(Instant.parse("2026-10-04T17:00:00Z"));
+        room.acceptEstimate(Instant.parse("2026-10-04T17:00:00Z"), "1h");
 
         // When
         Document document = new Document();
@@ -68,7 +70,10 @@ class RoomMappingTest {
                 () -> assertEquals(room.getParticipants(), result.getParticipants()),
                 () -> assertEquals(room.getVotes(), result.getVotes()),
                 () -> assertEquals("1d", result.getVote("Dmitry").getCard().getValue()),
+                () -> assertEquals(room.getTask(), result.getTask()),
                 () -> assertEquals(room.getHistory(), result.getHistory()),
+                () -> assertEquals("PIP-25", result.getHistory().get(0).getTask().getName()),
+                () -> assertEquals("1h", result.getHistory().get(0).getEstimate()),
                 () -> assertEquals("1d", result.getHistory().get(0).getVotes().get(0).getCard().getValue())
         );
     }
