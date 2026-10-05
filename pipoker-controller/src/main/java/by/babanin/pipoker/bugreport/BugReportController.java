@@ -1,0 +1,49 @@
+package by.babanin.pipoker.bugreport;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import lombok.extern.log4j.Log4j2;
+
+/**
+ * Takes bug reports over plain HTTP rather than STOMP, so that a person can report a problem even when
+ * the page can't connect to the rooms.
+ */
+@RestController
+@RequestMapping("/api/bug-reports")
+@Log4j2
+public class BugReportController {
+
+    private final BugReportService bugReportService;
+
+    public BugReportController(BugReportService bugReportService) {
+        this.bugReportService = bugReportService;
+    }
+
+    // The proxy in front of the backend passes the browser's address on, and the server takes it from there
+    // (see server.forward-headers-strategy)
+    @PostMapping
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void report(@Valid @RequestBody BugReportDto report, HttpServletRequest request) {
+        bugReportService.report(report, request.getRemoteAddr());
+    }
+
+    @ExceptionHandler(TooManyBugReportsException.class)
+    @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
+    void tooManyReports() {
+        // The page tells the person to try again later
+    }
+
+    @ExceptionHandler(BugReportDeliveryException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    void notDelivered(BugReportDeliveryException e) {
+        log.error("A bug report wasn't delivered: {}", e.getMessage());
+    }
+}
