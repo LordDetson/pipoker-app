@@ -213,6 +213,8 @@ class RoomControllerTest {
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, expectedResult), results.poll()));
         Mockito.verify(roomPresence).forget(roomId, "Dmitry");
         Mockito.verify(activity).left(LeaveReason.LEFT);
+        // The others may have waited only for the one who left
+        Mockito.verify(roomPresence).revealIfEveryoneVoted(roomId);
     }
 
     @Test
@@ -297,6 +299,8 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.VOTE_ADDED, expectedResult), results.poll()));
         Mockito.verify(activity).voted();
+        // The last vote reveals the cards, once it is told to the room
+        Mockito.verify(roomPresence).revealIfEveryoneVoted(roomId);
     }
 
     @Test
@@ -351,6 +355,8 @@ class RoomControllerTest {
                         new RoomEvent(roomId, EventType.PARTICIPANT_ROLE_CHANGED, new ParticipantDto("Dmitry", true))
                 ), List.copyOf(results)));
         Mockito.verify(activity).roleChanged(true);
+        // A watcher isn't waited for
+        Mockito.verify(roomPresence).revealIfEveryoneVoted(roomId);
     }
 
     @Test

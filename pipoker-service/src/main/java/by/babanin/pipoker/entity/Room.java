@@ -255,6 +255,16 @@ public class Room {
     }
 
     /**
+     * Whether every voter at the table has voted in the current round, and somebody has: then the cards are revealed
+     * by themselves. Watchers don't vote, so they aren't waited for.
+     */
+    public boolean everyoneVoted() {
+        return !votes.isEmpty() && participants.stream()
+                .filter(participant -> !participant.isWatcher())
+                .allMatch(participant -> findVote(participant.getNickname()).isPresent());
+    }
+
+    /**
      * Accepts the estimate the team agreed on for the revealed round, in place of the one accepted before.
      * Only the round on the table can get it: once a new round starts, the previous one is closed.
      *

@@ -45,12 +45,14 @@ import by.babanin.pipoker.activity.RoomActivity;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
+import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
+import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.service.Departure;
 import by.babanin.pipoker.service.RoomRemovedEvent;
@@ -62,6 +64,7 @@ class RoomPresenceTest {
     private static final Duration STARTUP_GRACE_PERIOD = Duration.ofSeconds(30);
     private static final Duration LATER = Duration.ofMinutes(1);
     private static final Duration MOMENT = Duration.ofMillis(100);
+    private static final Instant REVEALED_AT = Instant.parse("2026-10-05T15:00:00Z");
 
     private RoomService roomService;
     private SimpMessageSendingOperations messagingTemplate;
@@ -84,6 +87,12 @@ class RoomPresenceTest {
         when(modelMapper.map(any(Vote.class), eq(VoteDto.class))).thenAnswer(invocation -> {
             Vote vote = invocation.getArgument(0);
             return new VoteDto(vote.getParticipant().getNickname(), vote.getCard().getValue());
+        });
+        when(modelMapper.map(any(Round.class), eq(RoundDto.class))).thenAnswer(invocation -> {
+            Round round = invocation.getArgument(0);
+            return new RoundDto(round.getRevealedAt(), round.getVotes().stream()
+                    .map(vote -> new VoteDto(vote.getParticipant().getNickname(), vote.getCard().getValue()))
+                    .toList());
         });
         presence = new RoomPresence(roomService, new SeatLocks(), modelMapper, messagingTemplate, activity, scheduler, GRACE_PERIOD, STARTUP_GRACE_PERIOD);
 
@@ -118,6 +127,10 @@ class RoomPresenceTest {
             }
             return true;
         });
+        when(roomService.showVotesIfEveryoneVoted(room.getId())).thenAnswer(invocation ->
+                !room.isVotesShown() && room.everyoneVoted()
+                        ? room.showVotes(REVEALED_AT)
+                        : Optional.empty());
         doAnswer(invocation -> {
             if(!room.haveParticipants()) {
                 when(roomService.find(room.getId())).thenReturn(Optional.empty());
@@ -514,6 +527,102 @@ class RoomPresenceTest {
 
         presence.forget(room.getId(), "Alex");
         assertEquals(0, presence.peopleOnline());
+    }
+
+    @Test
+    @DisplayName("The cards are revealed by themselves once everyone at the table has voted")
+    void revealsWhenEveryoneVoted() {
+        room.addVote("Dmitry", "1");
+
+        presence.revealIfEveryoneVoted(room.getId());
+
+        assertFalse(room.isVotesShown(), "Alex hasn't voted");
+
+        room.addVote("Alex", "1");
+        presence.revealIfEveryoneVoted(room.getId());
+
+        assertTrue(room.isVotesShown());
+        verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(), new RoomEvent(room.getId(),
+                EventType.SHOW_VOTES, new RoundDto(REVEALED_AT, List.of(new VoteDto("Dmitry", "1"), new VoteDto("Alex", "1")))));
+        verify(activity).revealed();
+    }
+
+    @Test
+    @DisplayName("The cards wait for someone who refreshes the page, and are revealed when they come back with a vote")
+    void revealWaitsForRefreshedPage() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(Duration.ZERO);
+        assertFalse(room.containsParticipant("Alex"));
+
+        room.addVote("Dmitry", "1");
+        presence.revealIfEveryoneVoted(room.getId());
+
+        assertFalse(room.isVotesShown(), "Alex is still at the table, their page is refreshing");
+
+        presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh");
+
+        assertFalse(room.isVotesShown(), "Alex came back without a vote");
+        room.addVote("Alex", "1");
+        presence.revealIfEveryoneVoted(room.getId());
+        assertTrue(room.isVotesShown());
+    }
+
+    @Test
+    @DisplayName("Someone who refreshed the page with a vote reveals the cards when they come back")
+    void revealAfterRefreshWithVote() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        room.addVote("Alex", "1");
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(Duration.ZERO);
+        room.addVote("Dmitry", "1");
+        presence.revealIfEveryoneVoted(room.getId());
+        assertFalse(room.isVotesShown(), "Alex's vote is away with them");
+
+        presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh");
+
+        assertTrue(room.isVotesShown());
+        assertEquals(2, room.getHistory().getLast().getVotes().size());
+    }
+
+    @Test
+    @DisplayName("The cards are revealed when the only one who hasn't voted leaves for good")
+    void revealWhenLastVoterLeaves() {
+        room.addParticipant("Olga");
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        presence.hold(room.getId(), "Alex", "alex-tab");
+        presence.hold(room.getId(), "Olga", "olga-tab");
+        room.addVote("Dmitry", "1");
+
+        // Alex closes the page
+        presence.pageClosed("alex-tab");
+        presence.disconnected(disconnect("alex-tab", CloseStatus.GOING_AWAY));
+        scheduler.advance(GRACE_PERIOD.minus(MOMENT));
+        // Olga loses the connection
+        presence.disconnected(disconnect("olga-tab", CloseStatus.NO_CLOSE_FRAME));
+        assertFalse(room.isVotesShown());
+
+        scheduler.advance(MOMENT);
+        assertFalse(room.isVotesShown(), "Olga still may come back");
+
+        scheduler.advance(GRACE_PERIOD);
+        assertTrue(room.isVotesShown());
+        assertEquals(List.of("Dmitry"), room.getHistory().getLast().getVotes().stream()
+                .map(vote -> vote.getParticipant().getNickname()).toList());
+    }
+
+    @Test
+    @DisplayName("A failed reveal leaves the cards hidden and is not told to anyone")
+    void failedReveal() {
+        when(roomService.showVotesIfEveryoneVoted(room.getId())).thenThrow(new RuntimeException("database is down"));
+
+        presence.revealIfEveryoneVoted(room.getId());
+
+        verify(messagingTemplate, never()).convertAndSend(anyString(), any(RoomEvent.class));
     }
 
     private Optional<Departure> stepAway(String nickname) {

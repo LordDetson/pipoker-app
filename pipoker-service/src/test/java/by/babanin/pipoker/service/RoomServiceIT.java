@@ -17,6 +17,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
@@ -283,6 +284,78 @@ class RoomServiceIT {
         finally {
             executor.shutdown();
         }
+    }
+
+    @Test
+    @DisplayName("The cards are revealed by themselves once every voter at the table has voted")
+    void showVotesIfEveryoneVoted() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1", "2"), Set.of(
+                Participant.createParticipant("Dmitry"),
+                Participant.createParticipant("Alex"),
+                Participant.createWatcher("Olga"))).getId();
+
+        // Then nobody voted yet
+        assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isEmpty());
+
+        // When
+        roomService.addVote(roomId, "Dmitry", "1");
+
+        // Then Alex hasn't voted, and the watcher isn't waited for
+        assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isEmpty());
+        assertFalse(roomService.get(roomId).isVotesShown());
+
+        // When
+        roomService.setTask(roomId, "PIP-28", null);
+        roomService.addVote(roomId, "Alex", "2");
+        Round revealed = roomService.showVotesIfEveryoneVoted(roomId).orElseThrow();
+
+        // Then
+        Room room = roomService.get(roomId);
+        assertTrue(room.isVotesShown());
+        assertEquals(List.of(revealed), room.getHistory());
+        assertEquals(2, revealed.getVotes().size());
+        assertEquals("PIP-28", revealed.getTask().getName());
+        assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isEmpty(), "the cards are revealed once");
+        assertEquals(1, roomService.get(roomId).getHistory().size());
+    }
+
+    @Test
+    @DisplayName("A voter who leaves or becomes a watcher isn't waited for anymore")
+    void showVotesIfEveryoneVotedAfterLeaving() {
+        // Given
+        UUID roomId = roomService.create("test", deck("1"), Set.of(
+                Participant.createParticipant("Dmitry"),
+                Participant.createParticipant("Alex"),
+                Participant.createParticipant("Olga"))).getId();
+        roomService.addVote(roomId, "Dmitry", "1");
+        assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isEmpty());
+
+        // When
+        roomService.changeRole(roomId, "Alex", true);
+        roomService.stepAway(roomId, "Olga");
+
+        // Then
+        assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isPresent());
+    }
+
+    @Test
+    @DisplayName("The last votes cast at the same moment reveal the cards once")
+    void simultaneousLastVotes() throws Exception {
+        List<String> nicknames = List.of("Dmitry", "Alex", "Olga", "Ivan", "Anna", "Petr", "Maria", "Oleg");
+        UUID roomId = roomService.create("test", deck("1")).getId();
+        nicknames.forEach(nickname -> roomService.addParticipant(roomId, nickname));
+        AtomicInteger reveals = new AtomicInteger();
+
+        simultaneously(nicknames, nickname -> {
+            roomService.addVote(roomId, nickname, "1");
+            roomService.showVotesIfEveryoneVoted(roomId).ifPresent(round -> reveals.incrementAndGet());
+        });
+
+        assertEquals(1, reveals.get());
+        Room room = roomService.get(roomId);
+        assertEquals(1, room.getHistory().size());
+        assertEquals(nicknames.size(), room.getHistory().getFirst().getVotes().size());
     }
 
     @Test

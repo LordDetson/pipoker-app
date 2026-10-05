@@ -96,6 +96,16 @@ public interface AtomicRoomRepository {
     Optional<Room> showVotes(UUID roomId, Instant revealedAt);
 
     /**
+     * Reveals the cards like {@link #showVotes} does, but only if every voter at the table has voted (see {@link Room#everyoneVoted}) at the moment of the update. So the vote that completes the
+     * round reveals it once, even when two people cast the last votes at the same time.
+     *
+     * @param revealedAt when the round enters the history
+     * @return the room as it was before, empty when the room is missing, has its cards revealed already or still
+     * waits for someone's vote
+     */
+    Optional<Room> showVotesIfEveryoneVoted(UUID roomId, Instant revealedAt);
+
+    /**
      * Starts a new round: no votes, cards hidden, no timer, and no task once the previous round got its estimate
      * (see {@link Room#clearVotes}).
      *

@@ -128,6 +128,8 @@ public class RoomController {
             roomPresence.forget(roomId, nickname);
             modelMapper.validate();
             tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, result));
+            // The one who left may have been the only voter the others waited for
+            roomPresence.revealIfEveryoneVoted(roomId);
         });
     }
 
@@ -144,6 +146,8 @@ public class RoomController {
             ParticipantDto result = modelMapper.map(change.participant(), ParticipantDto.class);
             modelMapper.validate();
             tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_ROLE_CHANGED, result));
+            // A watcher isn't waited for, so a voter who became one may have been the only vote missing
+            roomPresence.revealIfEveryoneVoted(roomId);
         });
     }
 
@@ -159,14 +163,15 @@ public class RoomController {
         return new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, result);
     }
 
+    // The vote is told to the room before the cards it may reveal
     @MessageMapping({ "/{roomId}/votes/add", "/{roomId}/vote" })
-    @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
-    RoomEvent addVote(@DestinationVariable UUID roomId, @Valid VoteDto vote) {
+    void addVote(@DestinationVariable UUID roomId, @Valid VoteDto vote) {
         Vote added = roomService.addVote(roomId, vote.getNickname(), vote.getCard());
         activity.voted();
         VoteDto result = modelMapper.map(added, VoteDto.class);
         modelMapper.validate();
-        return new RoomEvent(roomId, EventType.VOTE_ADDED, result);
+        tellRoom(new RoomEvent(roomId, EventType.VOTE_ADDED, result));
+        roomPresence.revealIfEveryoneVoted(roomId);
     }
 
     @MessageMapping({ "/{roomId}/votes/remove", "/{roomId}/votes/delete" })

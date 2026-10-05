@@ -241,6 +241,18 @@ public class RoomService {
     }
 
     /**
+     * Reveals the cards of the current round, like {@link #showVotes} does, once every voter at the table has voted (see {@link Room#everyoneVoted}).
+     *
+     * @return the round that entered the room's history, empty when the cards stay as they are
+     */
+    public Optional<Round> showVotesIfEveryoneVoted(UUID roomId) {
+        Instant revealedAt = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        // Only an update that revealed the cards finds the room, and the cards it revealed had votes
+        return roomRepository.showVotesIfEveryoneVoted(roomId, revealedAt)
+                .flatMap(before -> before.showVotes(revealedAt));
+    }
+
+    /**
      * Starts a new round: no votes, cards hidden, no timer.
      *
      * @return the task of the new round: the same one when the team votes on it again, null when the previous round
