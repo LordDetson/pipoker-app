@@ -53,19 +53,11 @@ public class RoomService {
     }
 
     public Room create(String name, Deck deck, Set<Participant> participants) {
-        return create(name, deck, participants, false);
-    }
-
-    /**
-     * @param autoReveal whether the cards are revealed by themselves once everyone has voted
-     */
-    public Room create(String name, Deck deck, Set<Participant> participants, boolean autoReveal) {
         if(deck == null) {
             throw new InvalidDataException("Deck can't be null");
         }
         AppUtils.validateAndThrow(validator, deck, InvalidDataException::new);
         Room room = new Room(name, deck);
-        room.setAutoReveal(autoReveal);
         if(CollectionUtils.isNotEmpty(participants)) {
             participants.forEach(participant -> {
                 if(participant.isWatcher()) {
@@ -249,8 +241,7 @@ public class RoomService {
     }
 
     /**
-     * Reveals the cards of the current round, like {@link #showVotes} does, if the room reveals them by itself and
-     * every voter at the table has voted (see {@link Room#everyoneVoted}).
+     * Reveals the cards of the current round, like {@link #showVotes} does, once every voter at the table has voted (see {@link Room#everyoneVoted}).
      *
      * @return the round that entered the room's history, empty when the cards stay as they are
      */
@@ -259,16 +250,6 @@ public class RoomService {
         // Only an update that revealed the cards finds the room, and the cards it revealed had votes
         return roomRepository.showVotesIfEveryoneVoted(roomId, revealedAt)
                 .flatMap(before -> before.showVotes(revealedAt));
-    }
-
-    /**
-     * Turns on or off revealing the cards by themselves once everyone has voted. Turning it on doesn't reveal
-     * the cards by itself: see {@link #showVotesIfEveryoneVoted}.
-     */
-    public void setAutoReveal(UUID roomId, boolean autoReveal) {
-        if(!roomRepository.setAutoReveal(roomId, autoReveal)) {
-            throw notFound(roomId);
-        }
     }
 
     /**

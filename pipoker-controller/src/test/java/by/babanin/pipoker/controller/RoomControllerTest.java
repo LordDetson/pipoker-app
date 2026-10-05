@@ -49,7 +49,6 @@ import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.RoomNotFoundException;
-import by.babanin.pipoker.model.AutoRevealDto;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
@@ -117,10 +116,9 @@ class RoomControllerTest {
         Deck deck = new Deck();
         deck.add("1d");
         Room room = new Room(name, deck);
-        room.setAutoReveal(true);
         RoomDto expectedResult = modelMapper.map(room, RoomDto.class);
 
-        when(roomService.create(name, deck, Collections.emptySet(), true))
+        when(roomService.create(name, deck, Collections.emptySet()))
                 .thenReturn(room);
 
         // When
@@ -129,7 +127,6 @@ class RoomControllerTest {
                 RoomCreationDto.builder()
                         .name(name)
                         .deck(modelMapper.map(deck, DeckDto.class))
-                        .autoReveal(true)
                         .build());
 
         // Then
@@ -148,8 +145,7 @@ class RoomControllerTest {
         room.addWatcher("Alex");
         RoomDto expectedResult = modelMapper.map(room, RoomDto.class);
 
-        // A page that doesn't know about revealing the cards by themselves creates a room that doesn't
-        when(roomService.create(name, deck, room.getParticipants(), false))
+        when(roomService.create(name, deck, room.getParticipants()))
                 .thenReturn(room);
 
         // When
@@ -455,43 +451,6 @@ class RoomControllerTest {
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES, expectedRound), results.poll()));
         Mockito.verify(roomService, times(1)).showVotes(roomId);
         Mockito.verify(activity).revealed();
-    }
-
-    @Test
-    void turnOnAutoRevealRevealsIfEveryoneVoted() throws Exception {
-        // Given
-        UUID roomId = UUID.randomUUID();
-
-        // When
-        String destination = String.format("/%s/auto-reveal", roomId);
-        Queue<RoomEvent> results = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
-                .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
-                        new AutoRevealDto(true));
-
-        // Then
-        await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.AUTO_REVEAL_CHANGED, true), results.poll()));
-        InOrder inOrder = Mockito.inOrder(roomService, roomPresence);
-        inOrder.verify(roomService).setAutoReveal(roomId, true);
-        inOrder.verify(roomPresence).revealIfEveryoneVoted(roomId);
-    }
-
-    @Test
-    void turnOffAutoReveal() throws Exception {
-        // Given
-        UUID roomId = UUID.randomUUID();
-
-        // When
-        String destination = String.format("/%s/auto-reveal", roomId);
-        Queue<RoomEvent> results = buildSession(RoomEvent.class, 1, TimeUnit.SECONDS, String.format(".%s", roomId))
-                .send(TestWebSocketConfig.BROKER_APP_DESTINATION_PREFIX + PiPokerApplication.ROOM_DESTINATION_PREFIX + destination,
-                        new AutoRevealDto(false));
-
-        // Then
-        await().atMost(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.AUTO_REVEAL_CHANGED, false), results.poll()));
-        Mockito.verify(roomService).setAutoReveal(roomId, false);
-        Mockito.verify(roomPresence, Mockito.never()).revealIfEveryoneVoted(roomId);
     }
 
     @Test

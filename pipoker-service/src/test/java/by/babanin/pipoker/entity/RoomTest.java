@@ -507,7 +507,6 @@ class RoomTest {
     @DisplayName("Everyone voted when every voter at the table has, watchers aside")
     void everyoneVoted() {
         Room room = new Room("test", deck("1"));
-        assertFalse(room.isAutoReveal(), "a new room reveals the cards by itself only when asked to");
         assertFalse(room.everyoneVoted(), "nobody is at the table");
 
         room.addWatcher("Olga");

@@ -128,7 +128,7 @@ class RoomPresenceTest {
             return true;
         });
         when(roomService.showVotesIfEveryoneVoted(room.getId())).thenAnswer(invocation ->
-                room.isAutoReveal() && !room.isVotesShown() && room.everyoneVoted()
+                !room.isVotesShown() && room.everyoneVoted()
                         ? room.showVotes(REVEALED_AT)
                         : Optional.empty());
         doAnswer(invocation -> {
@@ -532,7 +532,6 @@ class RoomPresenceTest {
     @Test
     @DisplayName("The cards are revealed by themselves once everyone at the table has voted")
     void revealsWhenEveryoneVoted() {
-        room.setAutoReveal(true);
         room.addVote("Dmitry", "1");
 
         presence.revealIfEveryoneVoted(room.getId());
@@ -551,7 +550,6 @@ class RoomPresenceTest {
     @Test
     @DisplayName("The cards wait for someone who refreshes the page, and are revealed when they come back with a vote")
     void revealWaitsForRefreshedPage() {
-        room.setAutoReveal(true);
         presence.hold(room.getId(), "Dmitry", "dmitry-tab");
         presence.hold(room.getId(), "Alex", "alex-tab");
         presence.pageClosed("alex-tab");
@@ -575,7 +573,6 @@ class RoomPresenceTest {
     @Test
     @DisplayName("Someone who refreshed the page with a vote reveals the cards when they come back")
     void revealAfterRefreshWithVote() {
-        room.setAutoReveal(true);
         presence.hold(room.getId(), "Dmitry", "dmitry-tab");
         presence.hold(room.getId(), "Alex", "alex-tab");
         room.addVote("Alex", "1");
@@ -595,7 +592,6 @@ class RoomPresenceTest {
     @Test
     @DisplayName("The cards are revealed when the only one who hasn't voted leaves for good")
     void revealWhenLastVoterLeaves() {
-        room.setAutoReveal(true);
         room.addParticipant("Olga");
         presence.hold(room.getId(), "Dmitry", "dmitry-tab");
         presence.hold(room.getId(), "Alex", "alex-tab");
@@ -617,18 +613,6 @@ class RoomPresenceTest {
         assertTrue(room.isVotesShown());
         assertEquals(List.of("Dmitry"), room.getHistory().getLast().getVotes().stream()
                 .map(vote -> vote.getParticipant().getNickname()).toList());
-    }
-
-    @Test
-    @DisplayName("A room that doesn't reveal the cards by itself waits for someone to reveal them")
-    void noRevealWhenTurnedOff() {
-        room.addVote("Dmitry", "1");
-        room.addVote("Alex", "1");
-
-        presence.revealIfEveryoneVoted(room.getId());
-
-        assertFalse(room.isVotesShown());
-        verify(messagingTemplate, never()).convertAndSend(anyString(), any(RoomEvent.class));
     }
 
     @Test

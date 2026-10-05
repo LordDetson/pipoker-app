@@ -53,7 +53,6 @@ import by.babanin.pipoker.entity.Timer;
 import by.babanin.pipoker.exception.ConstraintException;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.InvalidDataException;
-import by.babanin.pipoker.exception.RoomNotFoundException;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.exception.VoteServiceException;
 import by.babanin.pipoker.repository.RoomRepository;
@@ -294,8 +293,7 @@ class RoomServiceIT {
         UUID roomId = roomService.create("test", deck("1", "2"), Set.of(
                 Participant.createParticipant("Dmitry"),
                 Participant.createParticipant("Alex"),
-                Participant.createWatcher("Olga")), true).getId();
-        assertTrue(roomService.get(roomId).isAutoReveal());
+                Participant.createWatcher("Olga"))).getId();
 
         // Then nobody voted yet
         assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isEmpty());
@@ -329,7 +327,7 @@ class RoomServiceIT {
         UUID roomId = roomService.create("test", deck("1"), Set.of(
                 Participant.createParticipant("Dmitry"),
                 Participant.createParticipant("Alex"),
-                Participant.createParticipant("Olga")), true).getId();
+                Participant.createParticipant("Olga"))).getId();
         roomService.addVote(roomId, "Dmitry", "1");
         assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isEmpty());
 
@@ -342,41 +340,10 @@ class RoomServiceIT {
     }
 
     @Test
-    @DisplayName("A room that doesn't reveal the cards by itself waits for someone to reveal them")
-    void showVotesIfEveryoneVotedTurnedOff() {
-        // Given rooms created before revealing by themselves existed, and by pages that don't know about it
-        UUID roomId = roomService.create("test", deck("1"), Set.of(Participant.createParticipant("Dmitry"))).getId();
-        mongoTemplate.updateFirst(query(where("id").is(roomId)), new Update().unset("autoReveal"), Room.class);
-        assertFalse(roomService.get(roomId).isAutoReveal());
-        roomService.addVote(roomId, "Dmitry", "1");
-
-        // Then
-        assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isEmpty());
-
-        // When
-        roomService.setAutoReveal(roomId, true);
-
-        // Then
-        assertTrue(roomService.get(roomId).isAutoReveal());
-        assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isPresent());
-
-        // When
-        roomService.clearVotes(roomId);
-        roomService.setAutoReveal(roomId, false);
-        roomService.addVote(roomId, "Dmitry", "1");
-
-        // Then
-        assertFalse(roomService.get(roomId).isAutoReveal());
-        assertTrue(roomService.showVotesIfEveryoneVoted(roomId).isEmpty());
-        assertThrows(RoomNotFoundException.class, () -> roomService.setAutoReveal(UUID.randomUUID(), true));
-        assertTrue(roomService.showVotesIfEveryoneVoted(UUID.randomUUID()).isEmpty());
-    }
-
-    @Test
     @DisplayName("The last votes cast at the same moment reveal the cards once")
     void simultaneousLastVotes() throws Exception {
         List<String> nicknames = List.of("Dmitry", "Alex", "Olga", "Ivan", "Anna", "Petr", "Maria", "Oleg");
-        UUID roomId = roomService.create("test", deck("1"), Set.of(), true).getId();
+        UUID roomId = roomService.create("test", deck("1")).getId();
         nicknames.forEach(nickname -> roomService.addParticipant(roomId, nickname));
         AtomicInteger reveals = new AtomicInteger();
 
@@ -787,7 +754,6 @@ class RoomServiceIT {
         assertMarksActive(roomId, () -> roomService.addVote(roomId, "Dmitry", "1"));
         Round revealed = roomService.showVotes(roomId).orElseThrow();
         assertMarksActive(roomId, () -> roomService.acceptEstimate(roomId, revealed.getRevealedAt(), "1"));
-        assertMarksActive(roomId, () -> roomService.setAutoReveal(roomId, true));
 
         Instant past = Instant.now().minus(Duration.ofHours(1));
         setLastActivity(roomId, past);

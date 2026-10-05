@@ -55,10 +55,6 @@ public class RoomDto {
     @JsonInclude(JsonInclude.Include.NON_DEFAULT)
     private boolean votesShown;
 
-    // The cards are revealed by themselves once everyone has voted; left out of the JSON when they aren't
-    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
-    private boolean autoReveal;
-
     // The discussion timer, left out of the JSON when nobody has started one in this round
     private TimerDto timer;
 

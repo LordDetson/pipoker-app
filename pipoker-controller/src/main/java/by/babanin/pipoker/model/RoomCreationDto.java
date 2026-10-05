@@ -33,8 +33,4 @@ public class RoomCreationDto {
     @NotNull
     @JsonDeserialize(as = LinkedHashSet.class)
     private final Set<ParticipantDto> participants = new LinkedHashSet<>();
-
-    // Whether the cards are revealed by themselves once everyone has voted; pages that don't know it create rooms
-    // that don't
-    private boolean autoReveal;
 }

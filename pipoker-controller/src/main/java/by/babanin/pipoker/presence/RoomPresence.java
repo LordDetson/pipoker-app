@@ -202,7 +202,7 @@ public class RoomPresence {
     }
 
     /**
-     * Reveals the cards by themselves if the room wants it and every voter at the table has voted. Someone who stepped
+     * Reveals the cards by themselves once every voter at the table has voted. Someone who stepped
      * away while their page refreshes is still at the table, so the cards wait until they come back or leave for good.
      * <p>
      * It follows a change that has already happened and been told to the room, so a failure here doesn't undo it:

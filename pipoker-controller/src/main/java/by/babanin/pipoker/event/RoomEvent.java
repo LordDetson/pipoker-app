@@ -56,11 +56,6 @@ public class RoomEvent {
          */
         ESTIMATE_ACCEPTED,
         /**
-         * Someone turned on or off revealing the cards by themselves once everyone has voted. Turned on when everyone
-         * has voted already, it comes right before SHOW_VOTES.
-         */
-        AUTO_REVEAL_CHANGED,
-        /**
          * The room was closed because nobody did anything in it for long, and everyone left it.
          */
         ROOM_CLOSED,
@@ -92,34 +87,27 @@ public class RoomEvent {
     // CLEAR_VOTES: the task of the new round, none when the previous round got its estimate or had no task.
     private TaskDto task;
 
-    // AUTO_REVEAL_CHANGED: whether the cards are revealed by themselves now
-    private Boolean autoReveal;
-
     public RoomEvent(UUID roomId, EventType eventType) {
-        this(roomId, eventType, null, null, null, null, null, null);
+        this(roomId, eventType, null, null, null, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, ParticipantDto participant) {
-        this(roomId, eventType, participant, null, null, null, null, null);
+        this(roomId, eventType, participant, null, null, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, VoteDto vote) {
-        this(roomId, eventType, null, vote, null, null, null, null);
+        this(roomId, eventType, null, vote, null, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, TimerDto timer) {
-        this(roomId, eventType, null, null, null, timer, null, null);
+        this(roomId, eventType, null, null, null, timer, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, RoundDto round) {
-        this(roomId, eventType, null, null, round, null, null, null);
+        this(roomId, eventType, null, null, round, null, null);
     }
 
     public RoomEvent(UUID roomId, EventType eventType, TaskDto task) {
-        this(roomId, eventType, null, null, null, null, task, null);
-    }
-
-    public RoomEvent(UUID roomId, EventType eventType, boolean autoReveal) {
-        this(roomId, eventType, null, null, null, null, null, autoReveal);
+        this(roomId, eventType, null, null, null, null, task);
     }
 }

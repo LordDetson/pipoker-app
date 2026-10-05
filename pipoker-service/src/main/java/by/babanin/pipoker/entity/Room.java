@@ -82,12 +82,6 @@ public class Room {
     @Getter
     private Task task;
 
-    // Whether the cards are revealed by themselves once every voter at the table has voted.
-    // Rooms stored before it was kept don't reveal by themselves.
-    @Getter
-    @Setter
-    private boolean autoReveal;
-
     public Room(String name, Deck deck) {
         this.id = UUID.randomUUID();
         this.name = name;
@@ -262,7 +256,7 @@ public class Room {
 
     /**
      * Whether every voter at the table has voted in the current round, and somebody has: then the cards are revealed
-     * by themselves, if the room wants it (see {@link #isAutoReveal()}). Watchers don't vote, so they aren't waited for.
+     * by themselves. Watchers don't vote, so they aren't waited for.
      */
     public boolean everyoneVoted() {
         return !votes.isEmpty() && participants.stream()

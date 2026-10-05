@@ -34,7 +34,6 @@ import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.PiPokerException;
-import by.babanin.pipoker.model.AutoRevealDto;
 import by.babanin.pipoker.model.EstimateDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
@@ -81,7 +80,7 @@ public class RoomController {
         Set<Participant> participants = roomCreationDto.getParticipants().stream()
                 .map(participantDto -> modelMapper.map(participantDto, Participant.class))
                 .collect(Collectors.toUnmodifiableSet());
-        Room room = roomService.create(roomCreationDto.getName(), deck, participants, roomCreationDto.isAutoReveal());
+        Room room = roomService.create(roomCreationDto.getName(), deck, participants);
         activity.roomCreated();
         room.getParticipants().forEach(participant -> {
             roomPresence.hold(room.getId(), participant.getNickname(), sessionId);
@@ -251,18 +250,6 @@ public class RoomController {
         RoundDto result = modelMapper.map(accepted, RoundDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.ESTIMATE_ACCEPTED, result);
-    }
-
-    // Anyone in the room turns on or off revealing the cards by themselves. Turned on when everyone has voted already,
-    // it reveals the cards at once.
-    @MessageMapping("/{roomId}/auto-reveal")
-    void setAutoReveal(@DestinationVariable UUID roomId, AutoRevealDto autoRevealDto) {
-        boolean autoReveal = autoRevealDto.isAutoReveal();
-        roomService.setAutoReveal(roomId, autoReveal);
-        tellRoom(new RoomEvent(roomId, EventType.AUTO_REVEAL_CHANGED, autoReveal));
-        if(autoReveal) {
-            roomPresence.revealIfEveryoneVoted(roomId);
-        }
     }
 
     @MessageExceptionHandler

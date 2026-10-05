@@ -39,7 +39,6 @@ import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
-import by.babanin.pipoker.model.AutoRevealDto;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.EstimateDto;
 import by.babanin.pipoker.model.ParticipantDto;
@@ -138,7 +137,9 @@ class RoomApiIT {
     @DisplayName("Someone who becomes a watcher loses the hidden vote, and votes again after becoming a voter")
     void changeRole() throws Exception {
         // Given
-        UUID roomId = createRoom(dmitry, "test", List.of("1", "2"), new ParticipantDto("Dmitry", false)).getId();
+        // Alex hasn't voted, so Dmitry's vote doesn't reveal the cards
+        UUID roomId = createRoom(dmitry, "test", List.of("1", "2"), new ParticipantDto("Dmitry", false),
+                new ParticipantDto("Alex", false)).getId();
         String room = "/app/room/" + roomId;
         BlockingQueue<RoomEvent> alexEvents = alex.subscribe("/topic/room." + roomId, RoomEvent.class);
         dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "2"));
@@ -152,7 +153,8 @@ class RoomApiIT {
         assertEquals("Dmitry", watcher.getParticipant().getNickname());
         assertTrue(watcher.getParticipant().isWatcher());
         RoomDto watching = alex.request(room, RoomDto.class);
-        assertTrue(watching.getParticipants().iterator().next().isWatcher());
+        assertTrue(watching.getParticipants().stream().filter(participant -> participant.getNickname().equals("Dmitry"))
+                .findFirst().orElseThrow().isWatcher());
         assertTrue(watching.getVotes().isEmpty());
 
         // And a voter again, who votes in the same round
@@ -163,17 +165,11 @@ class RoomApiIT {
     }
 
     @Test
-    @DisplayName("The cards are revealed by themselves once every voter has voted, while the room wants it")
+    @DisplayName("The cards are revealed by themselves once every voter has voted")
     void autoReveal() throws Exception {
         // Given
-        BlockingQueue<RoomDto> rooms = dmitry.subscribe("/user/topic/room.created", RoomDto.class);
-        RoomCreationDto creation = RoomCreationDto.builder().name("test").deck(deck("1", "2")).autoReveal(true).build();
-        creation.getParticipants().addAll(List.of(new ParticipantDto("Dmitry", false), new ParticipantDto("Alex", false),
-                new ParticipantDto("Olga", true)));
-        dmitry.send("/app/room/create", creation);
-        RoomDto created = next(rooms);
-        assertTrue(created.isAutoReveal());
-        UUID roomId = created.getId();
+        UUID roomId = createRoom(dmitry, "test", List.of("1", "2"), new ParticipantDto("Dmitry", false),
+                new ParticipantDto("Alex", false), new ParticipantDto("Olga", true)).getId();
         String room = "/app/room/" + roomId;
         BlockingQueue<RoomEvent> alexEvents = alex.subscribe("/topic/room." + roomId, RoomEvent.class);
 
@@ -187,23 +183,9 @@ class RoomApiIT {
         RoomEvent revealed = next(alexEvents);
         assertEquals(EventType.SHOW_VOTES, revealed.getEventType());
         assertEquals(List.of(new VoteDto("Alex", "2"), new VoteDto("Dmitry", "1")), revealed.getRound().getVotes());
-        assertTrue(alex.request(room, RoomDto.class).isVotesShown());
-
-        // When the room stops revealing by itself
-        dmitry.send(room + "/votes/clear", "");
-        assertEquals(EventType.CLEAR_VOTES, next(alexEvents).getEventType());
-        dmitry.send(room + "/auto-reveal", new AutoRevealDto(false));
-        assertEquals(new RoomEvent(roomId, EventType.AUTO_REVEAL_CHANGED, false), next(alexEvents));
-        dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "1"));
-        alex.send(room + "/votes/add", new VoteDto("Alex", "1"));
-        next(alexEvents);
-        next(alexEvents);
-
-        // Then turning it on again reveals the cards at once, and nothing revealed them before
-        alex.send(room + "/auto-reveal", new AutoRevealDto(true));
-        assertEquals(new RoomEvent(roomId, EventType.AUTO_REVEAL_CHANGED, true), next(alexEvents));
-        assertEquals(EventType.SHOW_VOTES, next(alexEvents).getEventType());
-        assertEquals(2, alex.request(room, RoomDto.class).getHistory().size());
+        RoomDto after = alex.request(room, RoomDto.class);
+        assertTrue(after.isVotesShown());
+        assertEquals(1, after.getHistory().size());
     }
 
     @Test
@@ -242,8 +224,7 @@ class RoomApiIT {
         next(alexEvents);
         assertEquals(2, roomRepository.findById(roomId).orElseThrow().getVotes().size());
 
-        // Votes are shown
-        dmitry.send(room + "/votes/show", "");
+        // Everyone has voted, so the votes are shown
         RoomEvent shown = next(dmitryEvents);
         assertEquals(EventType.SHOW_VOTES, shown.getEventType());
         assertEquals(List.of(new VoteDto("Alex", "3"), new VoteDto("Dmitry", "2")), shown.getRound().getVotes());
@@ -382,11 +363,10 @@ class RoomApiIT {
         assertEquals(ErrorCode.INVALID_DATA, next(alexErrors).getCode());
         assertEquals(task, alex.request(room, RoomDto.class).getTask());
 
-        // The revealed round keeps the task, which can't change until the next round
+        // The only voter's vote reveals the round, which keeps the task, and the task can't change until the next round
         dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "2"));
         next(dmitryEvents);
         next(alexEvents);
-        dmitry.send(room + "/votes/show", "");
         RoundDto revealed = next(dmitryEvents).getRound();
         next(alexEvents);
         assertEquals(task, revealed.getTask());
@@ -425,8 +405,7 @@ class RoomApiIT {
         dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "1"));
         next(dmitryEvents);
         next(alexEvents);
-        dmitry.send(room + "/votes/show", "");
-        next(dmitryEvents);
+        assertEquals(EventType.SHOW_VOTES, next(dmitryEvents).getEventType());
         next(alexEvents);
         dmitry.send(room + "/votes/clear", "");
         assertEquals(new RoomEvent(roomId, EventType.CLEAR_VOTES, new TaskDto("PIP-26", null)), next(dmitryEvents));

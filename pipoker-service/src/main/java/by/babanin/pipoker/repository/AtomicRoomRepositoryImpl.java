@@ -33,7 +33,6 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     private static final String TIMER = "timer";
     private static final String TASK = "task";
     private static final String HISTORY = "history";
-    private static final String AUTO_REVEAL = "autoReveal";
     private static final String ROUND_REVEALED_AT = "revealedAt";
     private static final String ROUND_VOTES = "votes";
     private static final String ROUND_TASK = "task";
@@ -163,7 +162,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
                 new Document("$setIsSubset", List.of(
                         new Document("$map", new Document("input", voters).append("in", "$$this." + PARTICIPANT_KEY)),
                         new Document("$map", new Document("input", votes).append("in", "$$this." + VOTE_KEY))))));
-        Query room = query(where("id").is(roomId).and(AUTO_REVEAL).is(true).and(VOTES_SHOWN).ne(true)
+        Query room = query(where("id").is(roomId).and(VOTES_SHOWN).ne(true)
                 .andOperator(Criteria.expr(() -> everyoneVoted)));
         return Optional.ofNullable(mongoTemplate.findAndModify(room, showVotesUpdate(revealedAt), Room.class));
     }
@@ -184,12 +183,6 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
                 .append(VOTES_SHOWN, true)
                 .append(TIMER, "$$REMOVE")
                 .append(LAST_ACTIVITY, Instant.now()))));
-    }
-
-    @Override
-    public boolean setAutoReveal(UUID roomId, boolean autoReveal) {
-        Update update = new Update().set(AUTO_REVEAL, autoReveal).set(LAST_ACTIVITY, Instant.now());
-        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 
     @Override

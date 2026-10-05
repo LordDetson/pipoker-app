@@ -18,8 +18,7 @@ import by.babanin.pipoker.entity.Vote;
  * <p>
  * The changes someone makes on purpose also mark the room as active (see {@link Room#getLastActivity()}): joining,
  * changing the role, voting, taking a vote back, revealing the cards, starting a new round, starting or stopping the
- * timer, naming the task, accepting the estimate and
- * turning on or off revealing the cards by themselves. Leaving and coming back after a refresh
+ * timer, naming the task and accepting the estimate. Leaving and coming back after a refresh
  * or a lost connection don't, so a room where open pages merely stay connected is still idle.
  */
 public interface AtomicRoomRepository {
@@ -97,22 +96,14 @@ public interface AtomicRoomRepository {
     Optional<Room> showVotes(UUID roomId, Instant revealedAt);
 
     /**
-     * Reveals the cards like {@link #showVotes} does, but only if the room reveals them by itself and every voter at
-     * the table has voted (see {@link Room#everyoneVoted}) at the moment of the update. So the vote that completes the
+     * Reveals the cards like {@link #showVotes} does, but only if every voter at the table has voted (see {@link Room#everyoneVoted}) at the moment of the update. So the vote that completes the
      * round reveals it once, even when two people cast the last votes at the same time.
      *
      * @param revealedAt when the round enters the history
-     * @return the room as it was before, empty when the room is missing, doesn't reveal by itself, has its cards
-     * revealed already or still waits for someone's vote
+     * @return the room as it was before, empty when the room is missing, has its cards revealed already or still
+     * waits for someone's vote
      */
     Optional<Room> showVotesIfEveryoneVoted(UUID roomId, Instant revealedAt);
-
-    /**
-     * Turns on or off revealing the cards by themselves once everyone has voted.
-     *
-     * @return false when the room is missing
-     */
-    boolean setAutoReveal(UUID roomId, boolean autoReveal);
 
     /**
      * Starts a new round: no votes, cards hidden, no timer, and no task once the previous round got its estimate
