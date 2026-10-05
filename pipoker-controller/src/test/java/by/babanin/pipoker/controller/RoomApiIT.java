@@ -131,6 +131,34 @@ class RoomApiIT {
     }
 
     @Test
+    @DisplayName("Someone who becomes a watcher loses the hidden vote, and votes again after becoming a voter")
+    void changeRole() throws Exception {
+        // Given
+        UUID roomId = createRoom(dmitry, "test", List.of("1", "2"), new ParticipantDto("Dmitry", false)).getId();
+        String room = "/app/room/" + roomId;
+        BlockingQueue<RoomEvent> alexEvents = alex.subscribe("/topic/room." + roomId, RoomEvent.class);
+        dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "2"));
+        next(alexEvents);
+
+        // Dmitry becomes a watcher
+        dmitry.send(room + "/participants/role", new ParticipantDto("dmitry", true));
+        assertEquals(new RoomEvent(roomId, EventType.VOTE_REMOVED, new VoteDto("Dmitry", "2")), next(alexEvents));
+        RoomEvent watcher = next(alexEvents);
+        assertEquals(EventType.PARTICIPANT_ROLE_CHANGED, watcher.getEventType());
+        assertEquals("Dmitry", watcher.getParticipant().getNickname());
+        assertTrue(watcher.getParticipant().isWatcher());
+        RoomDto watching = alex.request(room, RoomDto.class);
+        assertTrue(watching.getParticipants().iterator().next().isWatcher());
+        assertTrue(watching.getVotes().isEmpty());
+
+        // And a voter again, who votes in the same round
+        dmitry.send(room + "/participants/role", new ParticipantDto("Dmitry", false));
+        assertFalse(next(alexEvents).getParticipant().isWatcher());
+        dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "1"));
+        assertEquals(new RoomEvent(roomId, EventType.VOTE_ADDED, new VoteDto("Dmitry", "1")), next(alexEvents));
+    }
+
+    @Test
     @DisplayName("Only the creator gets the created room")
     void createdRoomGoesToCreatorOnly() throws Exception {
         BlockingQueue<RoomDto> alexRooms = alex.subscribe("/user/topic/room.created", RoomDto.class);

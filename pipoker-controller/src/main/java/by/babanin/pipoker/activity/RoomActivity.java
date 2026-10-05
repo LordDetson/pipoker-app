@@ -24,6 +24,8 @@ public class RoomActivity {
     private final Counter roomsCreated;
     private final Counter votersJoined;
     private final Counter watchersJoined;
+    private final Counter becameWatchers;
+    private final Counter becameVoters;
     private final Counter returns;
     private final Counter votes;
     private final Counter reveals;
@@ -48,6 +50,8 @@ public class RoomActivity {
                     .tag("reason", reason.tag())
                     .register(registry));
         }
+        becameWatchers = roleChanged(registry, "watcher");
+        becameVoters = roleChanged(registry, "voter");
         returns = Counter.builder("pipoker.participants.returned")
                 .description("People who came back to their seat after losing the connection")
                 .register(registry);
@@ -78,6 +82,10 @@ public class RoomActivity {
         (watcher ? watchersJoined : votersJoined).increment();
     }
 
+    public void roleChanged(boolean watcher) {
+        (watcher ? becameWatchers : becameVoters).increment();
+    }
+
     public void left(LeaveReason reason) {
         leaves.get(reason).increment();
     }
@@ -105,6 +113,13 @@ public class RoomActivity {
     private static Counter joined(MeterRegistry registry, String role) {
         return Counter.builder("pipoker.participants.joined")
                 .description("People who joined a room, by their role")
+                .tag("role", role)
+                .register(registry);
+    }
+
+    private static Counter roleChanged(MeterRegistry registry, String role) {
+        return Counter.builder("pipoker.participants.role.changed")
+                .description("People who switched their role inside a room, by the new role")
                 .tag("role", role)
                 .register(registry);
     }
