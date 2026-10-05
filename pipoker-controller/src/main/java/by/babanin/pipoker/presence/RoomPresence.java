@@ -33,6 +33,7 @@ import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.RoomServiceException;
 import by.babanin.pipoker.model.ParticipantDto;
+import by.babanin.pipoker.model.RoundDto;
 import by.babanin.pipoker.model.VoteDto;
 import by.babanin.pipoker.service.Departure;
 import by.babanin.pipoker.service.RoomRemovedEvent;
@@ -197,6 +198,33 @@ public class RoomPresence {
                     seat.departure = seat.departure.withoutVote();
                 }
             });
+        }
+    }
+
+    /**
+     * Reveals the cards by themselves if the room wants it and every voter at the table has voted. Someone who stepped
+     * away while their page refreshes is still at the table, so the cards wait until they come back or leave for good.
+     * <p>
+     * It follows a change that has already happened and been told to the room, so a failure here doesn't undo it:
+     * the cards stay hidden, and anyone can still reveal them.
+     */
+    public void revealIfEveryoneVoted(UUID roomId) {
+        synchronized(lock) {
+            boolean voterAway = seats.entrySet().stream().anyMatch(entry -> entry.getKey().roomId().equals(roomId)
+                    && entry.getValue().departure != null && !entry.getValue().departure.participant().isWatcher());
+            if(voterAway) {
+                return;
+            }
+        }
+        try {
+            roomService.showVotesIfEveryoneVoted(roomId).ifPresent(round -> {
+                log.info("The cards are revealed in the room {} because everyone has voted", roomId);
+                activity.revealed();
+                tellRoom(roomId, new RoomEvent(roomId, EventType.SHOW_VOTES, modelMapper.map(round, RoundDto.class)));
+            });
+        }
+        catch(RuntimeException exception) {
+            log.warn("Couldn't reveal the cards in the room {} after everyone voted: {}", roomId, exception.getMessage());
         }
     }
 
@@ -389,6 +417,8 @@ public class RoomPresence {
         if(departure.vote() != null) {
             tellRoom(roomId, new RoomEvent(roomId, EventType.VOTE_ADDED, modelMapper.map(departure.vote(), VoteDto.class)));
         }
+        // The cards waited for this person while they were away
+        revealIfEveryoneVoted(roomId);
         return participant;
     }
 
@@ -405,6 +435,8 @@ public class RoomPresence {
         log.info("{} left the room {} after {}", departure.participant().getNickname(), seatKey.roomId(),
                 LeaveReason.PAGE_CLOSED.description());
         activity.left(LeaveReason.PAGE_CLOSED);
+        // The cards waited for this person, and the others may have all voted meanwhile
+        revealIfEveryoneVoted(seatKey.roomId());
         try {
             roomService.removeIfEmpty(seatKey.roomId());
         }
@@ -427,6 +459,8 @@ public class RoomPresence {
                 log.info("{} left the room {} after {}", participant.getNickname(), roomId, reason.description());
                 activity.left(reason);
                 tellRoom(roomId, new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, toDto(participant)));
+                // The others may have all voted, and only this person's vote was missing
+                revealIfEveryoneVoted(roomId);
             });
         }
         catch(RuntimeException exception) {

@@ -504,6 +504,35 @@ class RoomTest {
     }
 
     @Test
+    @DisplayName("Everyone voted when every voter at the table has, watchers aside")
+    void everyoneVoted() {
+        Room room = new Room("test", deck("1"));
+        assertFalse(room.isAutoReveal(), "a new room reveals the cards by itself only when asked to");
+        assertFalse(room.everyoneVoted(), "nobody is at the table");
+
+        room.addWatcher("Olga");
+        room.addParticipant("Dmitry");
+        room.addParticipant("Alex");
+        assertFalse(room.everyoneVoted(), "nobody voted");
+
+        room.addVote("Dmitry", "1");
+        assertFalse(room.everyoneVoted(), "Alex hasn't voted");
+
+        room.addVote("Alex", "1");
+        assertTrue(room.everyoneVoted());
+
+        room.removeVote("Alex");
+        room.changeRole("Alex", true);
+        assertTrue(room.everyoneVoted(), "Alex became a watcher");
+
+        room.addParticipant("Ivan");
+        assertFalse(room.everyoneVoted(), "Ivan has just joined");
+
+        room.removeParticipant("Ivan");
+        assertTrue(room.everyoneVoted(), "Ivan left");
+    }
+
+    @Test
     @DisplayName("Room name must have from 2 to 32 characters")
     void validateName() {
         assertAll(

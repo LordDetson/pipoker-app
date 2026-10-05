@@ -39,6 +39,7 @@ import by.babanin.pipoker.event.ErrorEvent;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
+import by.babanin.pipoker.model.AutoRevealDto;
 import by.babanin.pipoker.model.DeckDto;
 import by.babanin.pipoker.model.EstimateDto;
 import by.babanin.pipoker.model.ParticipantDto;
@@ -159,6 +160,50 @@ class RoomApiIT {
         assertFalse(next(alexEvents).getParticipant().isWatcher());
         dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "1"));
         assertEquals(new RoomEvent(roomId, EventType.VOTE_ADDED, new VoteDto("Dmitry", "1")), next(alexEvents));
+    }
+
+    @Test
+    @DisplayName("The cards are revealed by themselves once every voter has voted, while the room wants it")
+    void autoReveal() throws Exception {
+        // Given
+        BlockingQueue<RoomDto> rooms = dmitry.subscribe("/user/topic/room.created", RoomDto.class);
+        RoomCreationDto creation = RoomCreationDto.builder().name("test").deck(deck("1", "2")).autoReveal(true).build();
+        creation.getParticipants().addAll(List.of(new ParticipantDto("Dmitry", false), new ParticipantDto("Alex", false),
+                new ParticipantDto("Olga", true)));
+        dmitry.send("/app/room/create", creation);
+        RoomDto created = next(rooms);
+        assertTrue(created.isAutoReveal());
+        UUID roomId = created.getId();
+        String room = "/app/room/" + roomId;
+        BlockingQueue<RoomEvent> alexEvents = alex.subscribe("/topic/room." + roomId, RoomEvent.class);
+
+        // When everyone but the watcher votes
+        dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "1"));
+        assertEquals(new RoomEvent(roomId, EventType.VOTE_ADDED, new VoteDto("Dmitry", "1")), next(alexEvents));
+        alex.send(room + "/votes/add", new VoteDto("Alex", "2"));
+
+        // Then the last vote comes before the cards it reveals
+        assertEquals(new RoomEvent(roomId, EventType.VOTE_ADDED, new VoteDto("Alex", "2")), next(alexEvents));
+        RoomEvent revealed = next(alexEvents);
+        assertEquals(EventType.SHOW_VOTES, revealed.getEventType());
+        assertEquals(List.of(new VoteDto("Alex", "2"), new VoteDto("Dmitry", "1")), revealed.getRound().getVotes());
+        assertTrue(alex.request(room, RoomDto.class).isVotesShown());
+
+        // When the room stops revealing by itself
+        dmitry.send(room + "/votes/clear", "");
+        assertEquals(EventType.CLEAR_VOTES, next(alexEvents).getEventType());
+        dmitry.send(room + "/auto-reveal", new AutoRevealDto(false));
+        assertEquals(new RoomEvent(roomId, EventType.AUTO_REVEAL_CHANGED, false), next(alexEvents));
+        dmitry.send(room + "/votes/add", new VoteDto("Dmitry", "1"));
+        alex.send(room + "/votes/add", new VoteDto("Alex", "1"));
+        next(alexEvents);
+        next(alexEvents);
+
+        // Then turning it on again reveals the cards at once, and nothing revealed them before
+        alex.send(room + "/auto-reveal", new AutoRevealDto(true));
+        assertEquals(new RoomEvent(roomId, EventType.AUTO_REVEAL_CHANGED, true), next(alexEvents));
+        assertEquals(EventType.SHOW_VOTES, next(alexEvents).getEventType());
+        assertEquals(2, alex.request(room, RoomDto.class).getHistory().size());
     }
 
     @Test

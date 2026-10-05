@@ -33,6 +33,7 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
     private static final String TIMER = "timer";
     private static final String TASK = "task";
     private static final String HISTORY = "history";
+    private static final String AUTO_REVEAL = "autoReveal";
     private static final String ROUND_REVEALED_AT = "revealedAt";
     private static final String ROUND_VOTES = "votes";
     private static final String ROUND_TASK = "task";
@@ -146,6 +147,28 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
 
     @Override
     public Optional<Room> showVotes(UUID roomId, Instant revealedAt) {
+        // Returns the room as it was before the update, which tells whether this update recorded the round
+        return Optional.ofNullable(mongoTemplate.findAndModify(query(where("id").is(roomId)), showVotesUpdate(revealedAt),
+                Room.class));
+    }
+
+    @Override
+    public Optional<Room> showVotesIfEveryoneVoted(UUID roomId, Instant revealedAt) {
+        // Like Room#everyoneVoted: somebody voted, and the nickname of every voter is among the nicknames of the votes
+        Document votes = new Document("$ifNull", List.of("$" + VOTES, List.of()));
+        Document voters = new Document("$filter", new Document("input", new Document("$ifNull", List.of("$" + PARTICIPANTS, List.of())))
+                .append("cond", new Document("$ne", List.of("$$this." + PARTICIPANT_WATCHER, true))));
+        Document everyoneVoted = new Document("$and", List.of(
+                new Document("$gt", List.of(new Document("$size", votes), 0)),
+                new Document("$setIsSubset", List.of(
+                        new Document("$map", new Document("input", voters).append("in", "$$this." + PARTICIPANT_KEY)),
+                        new Document("$map", new Document("input", votes).append("in", "$$this." + VOTE_KEY))))));
+        Query room = query(where("id").is(roomId).and(AUTO_REVEAL).is(true).and(VOTES_SHOWN).ne(true)
+                .andOperator(Criteria.expr(() -> everyoneVoted)));
+        return Optional.ofNullable(mongoTemplate.findAndModify(room, showVotesUpdate(revealedAt), Room.class));
+    }
+
+    private static AggregationUpdate showVotesUpdate(Instant revealedAt) {
         // Every expression of the $set stage reads the room as it was before it, like Room#showVotes does
         Document votes = new Document("$ifNull", List.of("$" + VOTES, List.of()));
         Document history = new Document("$ifNull", List.of("$" + HISTORY, List.of()));
@@ -156,13 +179,17 @@ class AtomicRoomRepositoryImpl implements AtomicRoomRepository {
                 new Document("$eq", List.of(new Document("$size", votes), 0))));
         Document recorded = new Document("$slice", List.of(
                 new Document("$concatArrays", List.of(history, List.of(round))), -Room.HISTORY_LIMIT));
-        AggregationUpdate update = AggregationUpdate.from(List.of(context -> new Document("$set", new Document(HISTORY,
+        return AggregationUpdate.from(List.of(context -> new Document("$set", new Document(HISTORY,
                 new Document("$cond", List.of(notRecorded, history, recorded)))
                 .append(VOTES_SHOWN, true)
                 .append(TIMER, "$$REMOVE")
                 .append(LAST_ACTIVITY, Instant.now()))));
-        // Returns the room as it was before the update, which tells whether this update recorded the round
-        return Optional.ofNullable(mongoTemplate.findAndModify(query(where("id").is(roomId)), update, Room.class));
+    }
+
+    @Override
+    public boolean setAutoReveal(UUID roomId, boolean autoReveal) {
+        Update update = new Update().set(AUTO_REVEAL, autoReveal).set(LAST_ACTIVITY, Instant.now());
+        return mongoTemplate.updateFirst(query(where("id").is(roomId)), update, Room.class).getMatchedCount() == 1;
     }
 
     @Override

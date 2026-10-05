@@ -34,6 +34,7 @@ import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.PiPokerException;
+import by.babanin.pipoker.model.AutoRevealDto;
 import by.babanin.pipoker.model.EstimateDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
@@ -80,7 +81,7 @@ public class RoomController {
         Set<Participant> participants = roomCreationDto.getParticipants().stream()
                 .map(participantDto -> modelMapper.map(participantDto, Participant.class))
                 .collect(Collectors.toUnmodifiableSet());
-        Room room = roomService.create(roomCreationDto.getName(), deck, participants);
+        Room room = roomService.create(roomCreationDto.getName(), deck, participants, roomCreationDto.isAutoReveal());
         activity.roomCreated();
         room.getParticipants().forEach(participant -> {
             roomPresence.hold(room.getId(), participant.getNickname(), sessionId);
@@ -128,6 +129,8 @@ public class RoomController {
             roomPresence.forget(roomId, nickname);
             modelMapper.validate();
             tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, result));
+            // The one who left may have been the only voter the others waited for
+            roomPresence.revealIfEveryoneVoted(roomId);
         });
     }
 
@@ -144,6 +147,8 @@ public class RoomController {
             ParticipantDto result = modelMapper.map(change.participant(), ParticipantDto.class);
             modelMapper.validate();
             tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_ROLE_CHANGED, result));
+            // A watcher isn't waited for, so a voter who became one may have been the only vote missing
+            roomPresence.revealIfEveryoneVoted(roomId);
         });
     }
 
@@ -159,14 +164,15 @@ public class RoomController {
         return new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, result);
     }
 
+    // The vote is told to the room before the cards it may reveal
     @MessageMapping({ "/{roomId}/votes/add", "/{roomId}/vote" })
-    @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
-    RoomEvent addVote(@DestinationVariable UUID roomId, @Valid VoteDto vote) {
+    void addVote(@DestinationVariable UUID roomId, @Valid VoteDto vote) {
         Vote added = roomService.addVote(roomId, vote.getNickname(), vote.getCard());
         activity.voted();
         VoteDto result = modelMapper.map(added, VoteDto.class);
         modelMapper.validate();
-        return new RoomEvent(roomId, EventType.VOTE_ADDED, result);
+        tellRoom(new RoomEvent(roomId, EventType.VOTE_ADDED, result));
+        roomPresence.revealIfEveryoneVoted(roomId);
     }
 
     @MessageMapping({ "/{roomId}/votes/remove", "/{roomId}/votes/delete" })
@@ -245,6 +251,18 @@ public class RoomController {
         RoundDto result = modelMapper.map(accepted, RoundDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.ESTIMATE_ACCEPTED, result);
+    }
+
+    // Anyone in the room turns on or off revealing the cards by themselves. Turned on when everyone has voted already,
+    // it reveals the cards at once.
+    @MessageMapping("/{roomId}/auto-reveal")
+    void setAutoReveal(@DestinationVariable UUID roomId, AutoRevealDto autoRevealDto) {
+        boolean autoReveal = autoRevealDto.isAutoReveal();
+        roomService.setAutoReveal(roomId, autoReveal);
+        tellRoom(new RoomEvent(roomId, EventType.AUTO_REVEAL_CHANGED, autoReveal));
+        if(autoReveal) {
+            roomPresence.revealIfEveryoneVoted(roomId);
+        }
     }
 
     @MessageExceptionHandler
