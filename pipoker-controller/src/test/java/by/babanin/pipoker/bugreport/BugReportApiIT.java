@@ -39,7 +39,8 @@ class BugReportApiIT {
 
     private static final String REPORT = """
             {"message": "The cards don't turn over", "contact": "@alex", "page": "https://pipoker.duckdns.org/",
-             "language": "ru", "screen": "1920x1080", "unknown": "ignored"}""";
+             "language": "ru", "screen": "1920x1080", "voters": 4, "watchers": 1, "voted": 2,
+             "round": "revealed", "estimate": "3", "unknown": "ignored"}""";
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {
@@ -67,7 +68,10 @@ class BugReportApiIT {
         assertAll(
                 () -> assertEquals("The cards don't turn over", report.getValue().getMessage()),
                 () -> assertEquals("@alex", report.getValue().getContact()),
-                () -> assertEquals("1920x1080", report.getValue().getScreen())
+                () -> assertEquals("1920x1080", report.getValue().getScreen()),
+                () -> assertEquals(4, report.getValue().getVoters()),
+                () -> assertEquals(RoundStage.REVEALED, report.getValue().getRound()),
+                () -> assertEquals("3", report.getValue().getEstimate())
         );
     }
 
@@ -83,11 +87,13 @@ class BugReportApiIT {
     }
 
     @Test
-    @DisplayName("A report without a message or with too long a one isn't taken")
+    @DisplayName("A report without a message, with too long a one or with impossible details isn't taken")
     void invalid() throws Exception {
         // When, then
         assertEquals(400, post("{\"message\": \" \"}", "3.3.3.3").statusCode());
         assertEquals(400, post("{\"message\": \"" + "a".repeat(2001) + "\"}", "3.3.3.3").statusCode());
+        assertEquals(400, post("{\"message\": \"Broken\", \"round\": \"finished\"}", "3.3.3.3").statusCode());
+        assertEquals(400, post("{\"message\": \"Broken\", \"voters\": -1}", "3.3.3.3").statusCode());
         verify(sender, never()).send(any());
     }
 

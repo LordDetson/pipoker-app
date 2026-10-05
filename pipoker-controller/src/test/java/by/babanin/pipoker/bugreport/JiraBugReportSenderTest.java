@@ -62,6 +62,12 @@ class JiraBugReportSenderTest {
                                 {"type": "text", "text": "Комната: ", "marks": [{"type": "strong"}]},
                                 {"type": "text", "text": "3f2b6a8e-0c1d-4e5f-9a7b-1c2d3e4f5a6b"}]}]},
                               {"type": "listItem", "content": [{"type": "paragraph", "content": [
+                                {"type": "text", "text": "Участники: ", "marks": [{"type": "strong"}]},
+                                {"type": "text", "text": "голосуют 4, наблюдают 1"}]}]},
+                              {"type": "listItem", "content": [{"type": "paragraph", "content": [
+                                {"type": "text", "text": "Раунд: ", "marks": [{"type": "strong"}]},
+                                {"type": "text", "text": "голосование, проголосовали 2 из 4"}]}]},
+                              {"type": "listItem", "content": [{"type": "paragraph", "content": [
                                 {"type": "text", "text": "Время: ", "marks": [{"type": "strong"}]},
                                 {"type": "text", "text": "2026-10-05 17:05:00 +03:00 (Europe/Minsk)"}]}]},
                               {"type": "listItem", "content": [{"type": "paragraph", "content": [

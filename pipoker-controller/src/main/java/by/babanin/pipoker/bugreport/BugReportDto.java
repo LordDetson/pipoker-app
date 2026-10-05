@@ -3,6 +3,7 @@ package by.babanin.pipoker.bugreport;
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,7 +13,7 @@ import lombok.ToString;
 
 /**
  * A bug report sent from the site. The person writes what happened and, if they want an answer, how to reach them.
- * The page adds the rest by itself; nothing about the room's people or votes is sent.
+ * The page adds the rest by itself; of the room's people and votes only their counts are sent.
  */
 @Getter
 @Builder
@@ -34,6 +35,22 @@ public class BugReportDto {
 
     // The room the person was in, if any
     private UUID roomId;
+
+    // Who is at the table and how far the round got, as counts: no names, no votes
+    @PositiveOrZero
+    private Integer voters;
+
+    @PositiveOrZero
+    private Integer watchers;
+
+    @PositiveOrZero
+    private Integer voted;
+
+    private RoundStage round;
+
+    // The estimate the team accepted for the revealed round
+    @Size(max = 20)
+    private String estimate;
 
     // The browser's user agent
     @Size(max = 500)
