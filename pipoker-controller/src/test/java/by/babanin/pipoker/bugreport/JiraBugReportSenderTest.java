@@ -46,7 +46,7 @@ class JiraBugReportSenderTest {
                         {"fields": {
                           "project": {"key": "PIP"},
                           "issuetype": {"name": "Bug"},
-                          "summary": "[PROD] Сообщение с сайта: The cards don't turn over",
+                          "summary": "[PROD] The cards don't turn over",
                           "labels": ["site-bug-report", "prod"],
                           "description": {"type": "doc", "version": 1, "content": [
                             {"type": "paragraph", "content": [{"type": "text", "text": "The cards don't turn over"}]},
@@ -99,7 +99,7 @@ class JiraBugReportSenderTest {
         jira.expect(requestTo(CREATE_ISSUE_URL))
                 .andExpect(content().json("""
                         {"fields": {
-                          "summary": "Сообщение с сайта: First line",
+                          "summary": "First line",
                           "labels": ["site-bug-report"],
                           "description": {"content": [{"type": "paragraph", "content": [
                             {"type": "text", "text": "First line"},
@@ -122,7 +122,7 @@ class JiraBugReportSenderTest {
     void longSummary() {
         String summary = sender("qa").summary("a".repeat(150) + "\nsecond line");
 
-        assertEquals("[QA] Сообщение с сайта: " + "a".repeat(99) + "…", summary);
+        assertEquals("[QA] " + "a".repeat(99) + "…", summary);
     }
 
     @Test

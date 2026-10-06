@@ -99,14 +99,15 @@ public class JiraBugReportSender implements BugReportSender {
                 "description", description(report));
     }
 
-    // Like "[QA] Сообщение с сайта: the cards don't turn over": the first line of the report, cut to a readable length
+    // Like "[QA] The cards don't turn over": the first line of the report, cut to a readable length.
+    // The label site-bug-report already says where the issue came from.
     String summary(String message) {
         String firstLine = message.strip().lines().findFirst().orElse("").strip();
         if(firstLine.length() > SUMMARY_MAX_LENGTH) {
             firstLine = firstLine.substring(0, SUMMARY_MAX_LENGTH - 1).strip() + "…";
         }
         String source = environment.isBlank() ? "" : "[" + environment.toUpperCase() + "] ";
-        return source + "Сообщение с сайта: " + firstLine;
+        return source + firstLine;
     }
 
     // Jira's rich text (Atlassian Document Format): the report as the person wrote it, then a list of the details.
