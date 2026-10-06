@@ -1,4 +1,4 @@
-package by.babanin.pipoker.bugreport;
+package by.babanin.pipoker.feedback;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,37 +13,37 @@ import jakarta.validation.Valid;
 import lombok.extern.log4j.Log4j2;
 
 /**
- * Takes bug reports over plain HTTP rather than STOMP, so that a person can report a problem even when
+ * Takes feedback over plain HTTP rather than STOMP, so that a person can report a problem even when
  * the page can't connect to the rooms.
  */
 @RestController
-@RequestMapping("/api/bug-reports")
+@RequestMapping("/api/feedback")
 @Log4j2
-public class BugReportController {
+public class FeedbackController {
 
-    private final BugReportService bugReportService;
+    private final FeedbackService feedbackService;
 
-    public BugReportController(BugReportService bugReportService) {
-        this.bugReportService = bugReportService;
+    public FeedbackController(FeedbackService feedbackService) {
+        this.feedbackService = feedbackService;
     }
 
     // The proxy in front of the backend passes the browser's address on, and the server takes it from there
     // (see server.forward-headers-strategy)
     @PostMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void report(@Valid @RequestBody BugReportDto report, HttpServletRequest request) {
-        bugReportService.report(report, request.getRemoteAddr());
+    void send(@Valid @RequestBody FeedbackDto feedback, HttpServletRequest request) {
+        feedbackService.send(feedback, request.getRemoteAddr());
     }
 
-    @ExceptionHandler(TooManyBugReportsException.class)
+    @ExceptionHandler(TooMuchFeedbackException.class)
     @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
-    void tooManyReports() {
+    void tooMuchFeedback() {
         // The page tells the person to try again later
     }
 
-    @ExceptionHandler(BugReportDeliveryException.class)
+    @ExceptionHandler(FeedbackDeliveryException.class)
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
-    void notDelivered(BugReportDeliveryException e) {
-        log.error("A bug report wasn't delivered: {}", e.getMessage());
+    void notDelivered(FeedbackDeliveryException e) {
+        log.error("Feedback wasn't delivered: {}", e.getMessage());
     }
 }

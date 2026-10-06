@@ -1,4 +1,4 @@
-package by.babanin.pipoker.bugreport;
+package by.babanin.pipoker.feedback;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -8,11 +8,12 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import by.babanin.pipoker.bugreport.BugReportDetails.Detail;
+import by.babanin.pipoker.feedback.FeedbackDetails.Detail;
 
-class BugReportDetailsTest {
+class FeedbackDetailsTest {
 
-    static final BugReportDto FULL_REPORT = BugReportDto.builder()
+    static final FeedbackDto FULL_PROBLEM = FeedbackDto.builder()
+            .kind(FeedbackKind.PROBLEM)
             .message("The cards don't turn over")
             .contact("@alex")
             .page("https://pipoker.duckdns.org/room/3f2b6a8e-0c1d-4e5f-9a7b-1c2d3e4f5a6b")
@@ -43,24 +44,24 @@ class BugReportDetailsTest {
                 new Detail("Язык", "ru (браузер: ru-RU, en)"),
                 new Detail("Экран", "1920x1080 (окно 1366x768)"),
                 new Detail("Браузер", "Mozilla/5.0 Firefox/150.0")
-        ), BugReportDetails.of(FULL_REPORT));
+        ), FeedbackDetails.of(FULL_PROBLEM));
     }
 
     @Test
     @DisplayName("What the page didn't send is left out")
     void partial() {
-        BugReportDto report = BugReportDto.builder().message("Broken").contact(" ").window("400x800").timeZone("UTC").build();
+        FeedbackDto feedback = FeedbackDto.builder().message("Broken").contact(" ").window("400x800").timeZone("UTC").build();
 
-        assertEquals(List.of(new Detail("Время", "UTC"), new Detail("Экран", "окно 400x800")), BugReportDetails.of(report));
+        assertEquals(List.of(new Detail("Время", "UTC"), new Detail("Экран", "окно 400x800")), FeedbackDetails.of(feedback));
     }
 
     @Test
     @DisplayName("A revealed round tells the estimate the team accepted, if any")
     void revealed() {
-        BugReportDto revealed = BugReportDto.builder().message("Broken").round(RoundStage.REVEALED).build();
-        BugReportDto estimated = BugReportDto.builder().message("Broken").round(RoundStage.REVEALED).estimate("3").build();
+        FeedbackDto revealed = FeedbackDto.builder().message("Broken").round(RoundStage.REVEALED).build();
+        FeedbackDto estimated = FeedbackDto.builder().message("Broken").round(RoundStage.REVEALED).estimate("3").build();
 
-        assertEquals(List.of(new Detail("Раунд", "карты открыты")), BugReportDetails.of(revealed));
-        assertEquals(List.of(new Detail("Раунд", "карты открыты, принята оценка 3")), BugReportDetails.of(estimated));
+        assertEquals(List.of(new Detail("Раунд", "карты открыты")), FeedbackDetails.of(revealed));
+        assertEquals(List.of(new Detail("Раунд", "карты открыты, принята оценка 3")), FeedbackDetails.of(estimated));
     }
 }
