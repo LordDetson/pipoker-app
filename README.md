@@ -1,6 +1,6 @@
 # PiPoker backend
 
-The server of [PiPoker](https://pipoker.duckdns.org), free online Planning Poker without registration:
+The server of [PiPoker](https://pipoker.app), free online Planning Poker without registration:
 rooms with a card deck, voters and watchers, votes revealed to everyone at once and the history of the last
 estimates. The web client is [pipoker-web](https://github.com/LordDetson/pipoker-web);
 the server setup is in [pipoker-docker-config](https://github.com/LordDetson/pipoker-docker-config).
