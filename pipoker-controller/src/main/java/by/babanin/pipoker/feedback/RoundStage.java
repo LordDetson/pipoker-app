@@ -1,9 +1,9 @@
-package by.babanin.pipoker.bugreport;
+package by.babanin.pipoker.feedback;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * How far the round of the room got when the person reported a problem.
+ * How far the round of the room got when the person sent feedback.
  */
 public enum RoundStage {
 

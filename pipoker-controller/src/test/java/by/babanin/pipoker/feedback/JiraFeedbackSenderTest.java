@@ -1,4 +1,4 @@
-package by.babanin.pipoker.bugreport;
+package by.babanin.pipoker.feedback;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -13,6 +13,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,20 +23,21 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-class JiraBugReportSenderTest {
+class JiraFeedbackSenderTest {
 
     private static final String CREATE_ISSUE_URL = "https://api.atlassian.com/ex/jira/cloud-1/rest/api/3/issue";
 
     private final RestClient.Builder restClientBuilder = RestClient.builder();
     private final MockRestServiceServer jira = MockRestServiceServer.bindTo(restClientBuilder).build();
 
-    private JiraBugReportSender sender(String environment) {
-        return new JiraBugReportSender(restClientBuilder, "https://api.atlassian.com/ex/jira/cloud-1/", "owner@example.com",
-                "token-1", "PIP", "Bug", environment);
+    private JiraFeedbackSender sender(String environment) {
+        return new JiraFeedbackSender(restClientBuilder, "https://api.atlassian.com/ex/jira/cloud-1/", "owner@example.com",
+                "token-1", "PIP", Map.of(FeedbackKind.PROBLEM, "Bug", FeedbackKind.IDEA, "Task", FeedbackKind.REVIEW, "Task"),
+                environment);
     }
 
     @Test
-    @DisplayName("A report becomes an issue of the project, on behalf of the token's owner")
+    @DisplayName("A problem becomes a bug of the project, on behalf of the token's owner")
     void send() {
         // Given
         String credentials = Base64.getEncoder().encodeToString("owner@example.com:token-1".getBytes(StandardCharsets.UTF_8));
@@ -46,8 +48,8 @@ class JiraBugReportSenderTest {
                         {"fields": {
                           "project": {"key": "PIP"},
                           "issuetype": {"name": "Bug"},
-                          "summary": "[PROD] Сообщение с сайта: The cards don't turn over",
-                          "labels": ["site-bug-report", "prod"],
+                          "summary": "[PROD] The cards don't turn over",
+                          "labels": ["site-feedback", "problem", "prod"],
                           "description": {"type": "doc", "version": 1, "content": [
                             {"type": "paragraph", "content": [{"type": "text", "text": "The cards don't turn over"}]},
                             {"type": "bulletList", "content": [
@@ -86,7 +88,7 @@ class JiraBugReportSenderTest {
                         .body("{\"id\": \"10200\", \"key\": \"PIP-50\"}"));
 
         // When
-        sender("prod").send(BugReportDetailsTest.FULL_REPORT);
+        sender("prod").send(FeedbackDetailsTest.FULL_PROBLEM);
 
         // Then
         jira.verify();
@@ -99,8 +101,8 @@ class JiraBugReportSenderTest {
         jira.expect(requestTo(CREATE_ISSUE_URL))
                 .andExpect(content().json("""
                         {"fields": {
-                          "summary": "Сообщение с сайта: First line",
-                          "labels": ["site-bug-report"],
+                          "summary": "First line",
+                          "labels": ["site-feedback", "review"],
                           "description": {"content": [{"type": "paragraph", "content": [
                             {"type": "text", "text": "First line"},
                             {"type": "hardBreak"},
@@ -111,7 +113,27 @@ class JiraBugReportSenderTest {
                 .andRespond(withStatus(HttpStatus.CREATED));
 
         // When
-        sender("").send(BugReportDto.builder().message("\n First line\n\n*not bold*\n").build());
+        sender("").send(FeedbackDto.builder().kind(FeedbackKind.REVIEW).message("\n First line\n\n*not bold*\n").build());
+
+        // Then
+        jira.verify();
+    }
+
+    @Test
+    @DisplayName("An idea becomes a task with its own label")
+    void idea() {
+        // Given
+        jira.expect(requestTo(CREATE_ISSUE_URL))
+                .andExpect(content().json("""
+                        {"fields": {
+                          "issuetype": {"name": "Task"},
+                          "summary": "[QA] Show the average of the votes",
+                          "labels": ["site-feedback", "idea", "qa"]
+                        }}"""))
+                .andRespond(withStatus(HttpStatus.CREATED));
+
+        // When
+        sender("qa").send(FeedbackDto.builder().kind(FeedbackKind.IDEA).message("Show the average of the votes").build());
 
         // Then
         jira.verify();
@@ -122,7 +144,7 @@ class JiraBugReportSenderTest {
     void longSummary() {
         String summary = sender("qa").summary("a".repeat(150) + "\nsecond line");
 
-        assertEquals("[QA] Сообщение с сайта: " + "a".repeat(99) + "…", summary);
+        assertEquals("[QA] " + "a".repeat(99) + "…", summary);
     }
 
     @Test
@@ -133,11 +155,11 @@ class JiraBugReportSenderTest {
                 .andRespond(withBadRequest().body("{\"errors\": {\"issuetype\": \"Specify a valid issue type\"}}"));
 
         // When
-        BugReportDeliveryException e = assertThrows(BugReportDeliveryException.class,
-                () -> sender("qa").send(BugReportDto.builder().message("Broken").build()));
+        FeedbackDeliveryException e = assertThrows(FeedbackDeliveryException.class,
+                () -> sender("qa").send(FeedbackDto.builder().kind(FeedbackKind.PROBLEM).message("Broken").build()));
 
         // Then
-        assertEquals("Jira didn't take the bug report: 400 BAD_REQUEST {\"errors\": {\"issuetype\": \"Specify a valid issue type\"}}",
+        assertEquals("Jira didn't take the feedback: 400 BAD_REQUEST {\"errors\": {\"issuetype\": \"Specify a valid issue type\"}}",
                 e.getMessage());
     }
 
@@ -148,6 +170,6 @@ class JiraBugReportSenderTest {
         jira.expect(requestTo(CREATE_ISSUE_URL)).andRespond(withException(new SocketTimeoutException("timed out")));
 
         // When, then
-        assertThrows(BugReportDeliveryException.class, () -> sender("qa").send(BugReportDto.builder().message("Broken").build()));
+        assertThrows(FeedbackDeliveryException.class, () -> sender("qa").send(FeedbackDto.builder().kind(FeedbackKind.PROBLEM).message("Broken").build()));
     }
 }

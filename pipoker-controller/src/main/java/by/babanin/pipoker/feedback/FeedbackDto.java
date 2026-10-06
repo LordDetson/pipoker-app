@@ -1,8 +1,9 @@
-package by.babanin.pipoker.bugreport;
+package by.babanin.pipoker.feedback;
 
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -12,7 +13,8 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 
 /**
- * A bug report sent from the site. The person writes what happened and, if they want an answer, how to reach them.
+ * Feedback sent from the site: a problem, an idea or a review. The person chooses which, writes it and, if they want
+ * an answer, how to reach them.
  * The page adds the rest by itself; of the room's people and votes only their counts are sent.
  */
 @Getter
@@ -20,7 +22,10 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString
-public class BugReportDto {
+public class FeedbackDto {
+
+    @NotNull
+    private FeedbackKind kind;
 
     @NotBlank
     @Size(max = 2000)

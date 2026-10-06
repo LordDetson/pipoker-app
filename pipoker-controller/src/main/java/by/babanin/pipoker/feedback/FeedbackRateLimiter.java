@@ -1,4 +1,4 @@
-package by.babanin.pipoker.bugreport;
+package by.babanin.pipoker.feedback;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -7,13 +7,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Limits how many bug reports are taken in a window of time: from one address, and from everyone together.
+ * Limits how many messages of feedback are taken in a window of time: from one address, and from everyone together.
  * The total limit keeps a flood from many addresses from burying the owner's chat.
  * <p>
- * Each address counts its reports in a window that starts with its first report. The counts live in memory only,
+ * Each address counts its messages in a window that starts with its first one. The counts live in memory only,
  * so a restart of the backend starts them anew.
  */
-public class BugReportRateLimiter {
+public class FeedbackRateLimiter {
 
     // Above this many addresses, the ones whose window has passed are forgotten
     private static final int ADDRESSES_TO_SWEEP = 10_000;
@@ -25,7 +25,7 @@ public class BugReportRateLimiter {
     private final Clock clock;
     private final Map<String, Window> windows = new HashMap<>();
 
-    public BugReportRateLimiter(int limitPerAddress, int limitInTotal, Duration window, Clock clock) {
+    public FeedbackRateLimiter(int limitPerAddress, int limitInTotal, Duration window, Clock clock) {
         this.limitPerAddress = limitPerAddress;
         this.limitInTotal = limitInTotal;
         this.window = window;
@@ -33,9 +33,9 @@ public class BugReportRateLimiter {
     }
 
     /**
-     * Counts a report from the address.
+     * Counts a message from the address.
      *
-     * @return false if the address or everyone together has already sent as many reports as the window allows
+     * @return false if the address or everyone together has already sent as many messages as the window allows
      */
     public synchronized boolean tryAcquire(String address) {
         Instant now = clock.instant();
