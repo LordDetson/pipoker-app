@@ -17,7 +17,8 @@ jobs:
     # Approval is configured in the "prod" environment settings (required reviewers)
     environment: prod
     permissions:
-      contents: read
+      # Writes the release
+      contents: write
       packages: write
     steps:
       - name: Check the tag
@@ -38,3 +39,20 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
         run: docker buildx imagetools create --tag "$IMAGE_NAME:prod" "$IMAGE_NAME:$TAG"
+
+      # A release marks what went to PROD and when: the tag is the day of the promotion in Minsk time (a second
+      # promotion on the same day gets a counter), and the notes are the pull requests merged since the previous
+      # release. Software catalogs such as awesome-selfhosted list only projects with tagged releases.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          day=$(TZ=Europe/Minsk date +%Y.%m.%d)
+          release="v$day"
+          n=1
+          while gh release view "$release" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; do
+            n=$((n + 1))
+            release="v$day.$n"
+          done
+          gh release create "$release" --repo "$GITHUB_REPOSITORY" --target "$TAG" --title "$release" --generate-notes

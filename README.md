@@ -96,7 +96,8 @@ flowchart LR
 GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) builds and tests every pull request. Every push to main also
 publishes the image `ghcr.io/lorddetson/pipoker-controller`, which the QA environment picks up within a few minutes.
 A commit checked on QA goes to PROD through the **Promote to PROD** workflow
-([`promote.yml`](.github/workflows/promote.yml)), which waits for approval.
+([`promote.yml`](.github/workflows/promote.yml)), which waits for approval and then publishes a
+[release](../../releases) named after the day, with the pull requests that went to PROD.
 
 ## Contributing
 
