@@ -22,6 +22,7 @@ import org.springframework.validation.annotation.Validated;
 import by.babanin.pipoker.PiPokerApplication;
 import by.babanin.pipoker.activity.LeaveReason;
 import by.babanin.pipoker.activity.RoomActivity;
+import by.babanin.pipoker.activity.Source;
 import by.babanin.pipoker.entity.Deck;
 import by.babanin.pipoker.entity.Participant;
 import by.babanin.pipoker.entity.Room;
@@ -81,7 +82,7 @@ public class RoomController {
                 .map(participantDto -> modelMapper.map(participantDto, Participant.class))
                 .collect(Collectors.toUnmodifiableSet());
         Room room = roomService.create(roomCreationDto.getName(), deck, participants);
-        activity.roomCreated();
+        activity.roomCreated(Source.of(roomCreationDto.getSource()));
         room.getParticipants().forEach(participant -> {
             roomPresence.hold(room.getId(), participant.getNickname(), sessionId);
             activity.joined(participant.isWatcher());

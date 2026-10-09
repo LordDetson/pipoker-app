@@ -36,6 +36,8 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 import by.babanin.pipoker.PiPokerApplication;
 import by.babanin.pipoker.activity.LeaveReason;
 import by.babanin.pipoker.activity.RoomActivity;
+import by.babanin.pipoker.activity.Source;
+import by.babanin.pipoker.activity.VisitDto;
 import by.babanin.pipoker.config.TestWebSocketConfig;
 import by.babanin.pipoker.entity.Card;
 import by.babanin.pipoker.entity.Deck;
@@ -152,6 +154,7 @@ class RoomControllerTest {
         RoomCreationDto roomCreationDto = RoomCreationDto.builder()
                 .name(name)
                 .deck(expectedResult.getDeck())
+                .source(VisitDto.builder().from("habr").build())
                 .build();
         roomCreationDto.getParticipants().addAll(expectedResult.getParticipants());
         Queue<RoomDto> results = buildUserSession(RoomDto.class, PiPokerApplication.TOPIC_ROOM_CREATED_DESTINATION).send(
@@ -164,7 +167,7 @@ class RoomControllerTest {
         // The creator's connection holds the seats of the people in the new room
         Mockito.verify(roomPresence).hold(eq(room.getId()), eq("Dmitry"), anyString());
         Mockito.verify(roomPresence).hold(eq(room.getId()), eq("Alex"), anyString());
-        Mockito.verify(activity).roomCreated();
+        Mockito.verify(activity).roomCreated(Source.HABR);
         Mockito.verify(activity).joined(false);
         Mockito.verify(activity).joined(true);
     }
