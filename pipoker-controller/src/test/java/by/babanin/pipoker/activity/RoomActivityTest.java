@@ -23,7 +23,10 @@ class RoomActivityTest {
     @Test
     void countsWhatPeopleDo() {
         activity.connected(new SessionConnectedEvent(this, MessageBuilder.withPayload(new byte[0]).build()));
-        activity.roomCreated();
+        activity.visited(Source.HABR);
+        activity.visited(Source.HABR);
+        activity.visited(Source.DIRECT);
+        activity.roomCreated(Source.HABR);
         activity.joined(false);
         activity.joined(false);
         activity.joined(true);
@@ -36,7 +39,10 @@ class RoomActivityTest {
         activity.left(LeaveReason.CONNECTION_LOST);
 
         assertEquals(1, count("pipoker.connections"));
-        assertEquals(1, count("pipoker.room.creations"));
+        assertEquals(2, registry.get("pipoker.visits").tag("source", "habr").counter().count());
+        assertEquals(1, registry.get("pipoker.visits").tag("source", "direct").counter().count());
+        assertEquals(1, registry.get("pipoker.room.creations").tag("source", "habr").counter().count());
+        assertEquals(0, registry.get("pipoker.room.creations").tag("source", "direct").counter().count());
         assertEquals(2, registry.get("pipoker.participants.joined").tag("role", "voter").counter().count());
         assertEquals(1, registry.get("pipoker.participants.joined").tag("role", "watcher").counter().count());
         assertEquals(2, count("pipoker.votes"));
@@ -52,6 +58,12 @@ class RoomActivityTest {
     void everyReasonIsThereBeforeAnyoneLeaves() {
         // Each series exists from the start, so the dashboard shows a zero rather than no data
         assertEquals(LeaveReason.values().length, registry.get("pipoker.participants.left").counters().size());
+    }
+
+    @Test
+    void everySourceIsThereBeforeAnyoneComes() {
+        assertEquals(Source.values().length, registry.get("pipoker.visits").counters().size());
+        assertEquals(Source.values().length, registry.get("pipoker.room.creations").counters().size());
     }
 
     private double count(String name) {

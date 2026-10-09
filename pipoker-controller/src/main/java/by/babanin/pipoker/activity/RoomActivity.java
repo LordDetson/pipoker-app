@@ -12,7 +12,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Counts what people do in the rooms, for the activity dashboard. Nothing about who they are is kept:
- * no nicknames, room names or room ids, only how many times something happened.
+ * no nicknames, room names or room ids, only how many times something happened, and for visits and new rooms
+ * where the person came from (see {@link Source}).
  * <p>
  * The counters start from zero when the backend starts. Prometheus scrapes them from {@code /actuator/prometheus}
  * on the management port and takes care of the restarts.
@@ -21,7 +22,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 public class RoomActivity {
 
     private final Counter connections;
-    private final Counter roomsCreated;
+    private final Map<Source, Counter> visits = new EnumMap<>(Source.class);
+    private final Map<Source, Counter> roomsCreated = new EnumMap<>(Source.class);
     private final Counter votersJoined;
     private final Counter watchersJoined;
     private final Counter becameWatchers;
@@ -39,11 +41,18 @@ public class RoomActivity {
         connections = Counter.builder("pipoker.connections")
                 .description("Connections opened by browsers, including page refreshes and reconnects")
                 .register(registry);
-        // Not "pipoker.rooms.created": Prometheus reserves the _created suffix and would expose it as pipoker_rooms_total,
-        // which clashes with the pipoker.rooms gauge
-        roomsCreated = Counter.builder("pipoker.room.creations")
-                .description("Rooms created")
-                .register(registry);
+        for(Source source : Source.values()) {
+            visits.put(source, Counter.builder("pipoker.visits")
+                    .description("Start page opened, by where the person came from")
+                    .tag("source", source.tag())
+                    .register(registry));
+            // Not "pipoker.rooms.created": Prometheus reserves the _created suffix and would expose it as
+            // pipoker_rooms_total, which clashes with the pipoker.rooms gauge
+            roomsCreated.put(source, Counter.builder("pipoker.room.creations")
+                    .description("Rooms created, by where the person came from")
+                    .tag("source", source.tag())
+                    .register(registry));
+        }
         votersJoined = joined(registry, "voter");
         watchersJoined = joined(registry, "watcher");
         for(LeaveReason reason : LeaveReason.values()) {
@@ -82,8 +91,12 @@ public class RoomActivity {
         connections.increment();
     }
 
-    public void roomCreated() {
-        roomsCreated.increment();
+    public void visited(Source source) {
+        visits.get(source).increment();
+    }
+
+    public void roomCreated(Source source) {
+        roomsCreated.get(source).increment();
     }
 
     public void joined(boolean watcher) {

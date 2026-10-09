@@ -53,7 +53,7 @@ A Spring Boot application on Java 25, built with Maven:
 | Module | What it holds |
 |--------|---------------|
 | `pipoker-service` | Rooms, participants, votes and rounds, kept in MongoDB. A room changes by atomic updates (`AtomicRoomRepository`), so people acting at the same moment don't overwrite each other. |
-| `pipoker-controller` | The runnable application. Clients talk to it over STOMP on the WebSocket endpoint `/ws`: they send commands to `/app/room/...` and receive the room's events from `/topic/room.{roomId}` through RabbitMQ, which serves as the STOMP broker. It also tracks who is still connected, closes idle rooms, accepts feedback at `/api/feedback` and serves metrics for the activity dashboard on the internal port 8081. |
+| `pipoker-controller` | The runnable application. Clients talk to it over STOMP on the WebSocket endpoint `/ws`: they send commands to `/app/room/...` and receive the room's events from `/topic/room.{roomId}` through RabbitMQ, which serves as the STOMP broker. It also tracks who is still connected, closes idle rooms, accepts feedback at `/api/feedback`, counts visits by their source at `/api/visits` and serves metrics for the activity dashboard on the internal port 8081. |
 
 ## Getting started
 

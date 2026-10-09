@@ -6,6 +6,8 @@ import java.util.Set;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import tools.jackson.databind.annotation.JsonDeserialize;
 
+import by.babanin.pipoker.activity.VisitDto;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -33,4 +35,8 @@ public class RoomCreationDto {
     @NotNull
     @JsonDeserialize(as = LinkedHashSet.class)
     private final Set<ParticipantDto> participants = new LinkedHashSet<>();
+
+    // Where the creator came to the site from, for the activity dashboard; left out by older pages
+    @Valid
+    private VisitDto source;
 }

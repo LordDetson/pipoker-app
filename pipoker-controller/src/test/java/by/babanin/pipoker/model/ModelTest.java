@@ -68,7 +68,8 @@ class ModelTest {
     void readRoomCreation() throws Exception {
         String json = """
                 {"name": "Sprint 42", "deck": {"cards": ["1", "2", "1"]},
-                 "participants": [{"nickname": "Dmitry", "watcher": false}, {"nickname": "Alex", "watcher": true}]}
+                 "participants": [{"nickname": "Dmitry", "watcher": false}, {"nickname": "Alex", "watcher": true}],
+                 "source": {"from": "habr", "referrer": "https://habr.com/ru/articles/1/"}}
                 """;
 
         RoomCreationDto room = jsonMapper.readValue(json, RoomCreationDto.class);
@@ -77,7 +78,9 @@ class ModelTest {
                 () -> assertEquals("Sprint 42", room.getName()),
                 () -> assertEquals(List.of("1", "2"), List.copyOf(room.getDeck().getCards())),
                 () -> assertEquals(2, room.getParticipants().size()),
-                () -> assertTrue(room.getParticipants().contains(new ParticipantDto("Alex", true)))
+                () -> assertTrue(room.getParticipants().contains(new ParticipantDto("Alex", true))),
+                () -> assertEquals("habr", room.getSource().getFrom()),
+                () -> assertEquals("https://habr.com/ru/articles/1/", room.getSource().getReferrer())
         );
     }
 

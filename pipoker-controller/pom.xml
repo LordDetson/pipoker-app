@@ -125,6 +125,7 @@
                             <ignoredUsedUndeclaredDependencies>
                                 <ignoredUsedUndeclaredDependency>org.springframework*</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.junit.jupiter:junit-jupiter-api</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>org.junit.jupiter:junit-jupiter-params</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.awaitility:awaitility</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>org.mockito:mockito-core</ignoredUsedUndeclaredDependency>
                                 <ignoredUsedUndeclaredDependency>tools.jackson.core:jackson-databind</ignoredUsedUndeclaredDependency>
