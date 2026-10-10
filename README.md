@@ -18,7 +18,7 @@
 ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-FF6600?logo=rabbitmq&logoColor=white)
 
-[![Support the project](https://img.shields.io/badge/%E2%9D%A4%EF%B8%8F_Support_the_project-lorddetson.github.io-ff4f8b?style=for-the-badge)](https://lorddetson.github.io/)
+[![Support the project](https://img.shields.io/badge/%F0%9F%A7%A1_Support_the_project-lorddetson.github.io-ff8c00?style=for-the-badge)](https://lorddetson.github.io/)
 
 </div>
 
