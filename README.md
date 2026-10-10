@@ -4,20 +4,21 @@
 
 # PiPoker backend
 
-**The real-time server behind [PiPoker](https://pipoker.app), free online Planning Poker without registration.**
+**The real-time server behind [PiPoker](https://pipoker.app/?from=github), free online Planning Poker without registration.**
 
-[**pipoker.app**](https://pipoker.app) &nbsp;·&nbsp;
+[**pipoker.app**](https://pipoker.app/?from=github) &nbsp;·&nbsp;
 [Web client](https://github.com/LordDetson/pipoker-web) &nbsp;·&nbsp;
-[Server setup](https://github.com/LordDetson/pipoker-docker-config) &nbsp;·&nbsp;
-[Support the project](https://lorddetson.github.io/)
+[Server setup](https://github.com/LordDetson/pipoker-docker-config)
 
 [![CI](https://github.com/LordDetson/pipoker-app/actions/workflows/ci.yml/badge.svg)](https://github.com/LordDetson/pipoker-app/actions/workflows/ci.yml)
-[![Website](https://img.shields.io/website?url=https%3A%2F%2Fpipoker.app&label=pipoker.app)](https://pipoker.app)
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Fpipoker.app&label=pipoker.app)](https://pipoker.app/?from=github)
 [![License](https://img.shields.io/github/license/LordDetson/pipoker-app)](LICENSE)
 ![Java](https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4-6DB33F?logo=springboot&logoColor=white)
 ![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-FF6600?logo=rabbitmq&logoColor=white)
+
+[![Support the project](https://img.shields.io/badge/%F0%9F%A7%A1_Support_the_project-lorddetson.github.io-ff8c00?style=for-the-badge)](https://lorddetson.github.io/)
 
 </div>
 
@@ -102,7 +103,7 @@ A commit checked on QA goes to PROD through the **Promote to PROD** workflow
 ## Contributing
 
 Ideas, bug reports and pull requests are welcome: open an [issue](https://github.com/LordDetson/pipoker-app/issues)
-or use the **Feedback** button on [pipoker.app](https://pipoker.app). If PiPoker helps your team, you can
+or use the **Feedback** button on [pipoker.app](https://pipoker.app/?from=github). If PiPoker helps your team, you can
 [support its development](https://lorddetson.github.io/).
 
 ## License
