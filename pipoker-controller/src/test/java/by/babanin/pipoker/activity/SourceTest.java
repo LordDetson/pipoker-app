@@ -2,8 +2,10 @@ package by.babanin.pipoker.activity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class SourceTest {
 
@@ -76,9 +78,48 @@ class SourceTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"direct", "other_link", "other_site", "yandex"})
+    @CsvSource({"direct", "other_link", "other_site", "yandex", "bot"})
     void onlyHandedOutValuesOfTheParameterAreChannels(String from) {
         // The catch-all values and the search engines are never put in a link, so a link with them is an unknown one
         assertEquals(Source.OTHER_LINK, Source.of(from, null));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/141.0.0.0 Safari/537.36",
+            "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm) Chrome/116.0.1938.76 Safari/537.36",
+            "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+            "Mozilla/5.0 (compatible; Mail.RU_Bot/2.0; +http://go.mail.ru/help/robots)",
+            "DuckDuckBot-Https/1.1; (+https://duckduckgo.com/duckduckbot)",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36 Chrome-Lighthouse",
+            "curl/8.5.0",
+            "python-requests/2.32.3",
+            "",
+    })
+    void robotsAreCountedApartWhateverLinkTheyFollowed(String userAgent) {
+        assertEquals(Source.BOT, Source.ofVisit(VisitDto.builder().from("habr").build(), userAgent));
+        assertEquals(Source.BOT, Source.ofVisit(VisitDto.builder().referrer("https://www.bing.com/search?q=1").build(), userAgent));
+        assertEquals(Source.BOT, Source.ofVisit(null, userAgent));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36 YaBrowser/25.8.1.100",
+            "Mozilla/5.0 (Linux; Android 10; CUBOT X30) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36",
+    })
+    void browsersKeepTheirSource(String userAgent) {
+        assertEquals(Source.HABR, Source.ofVisit(VisitDto.builder().from("habr").build(), userAgent));
+        assertEquals(Source.DIRECT, Source.ofVisit(null, userAgent));
+    }
+
+    @Test
+    void ownTestsStayTestsInAHeadlessBrowser() {
+        String playwright = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/141.0.0.0 Safari/537.36";
+        assertEquals(Source.TEST, Source.ofVisit(VisitDto.builder().from("test").build(), playwright));
     }
 }

@@ -79,13 +79,31 @@ class VisitApiIT {
         assertEquals(before, registry.get("pipoker.visits").counters().stream().mapToDouble(counter -> counter.count()).sum());
     }
 
+    @Test
+    @DisplayName("A search engine's robot running the page is counted apart from people")
+    void robotsAreCountedApart() throws Exception {
+        double botBefore = visits("bot");
+        double habrBefore = visits("habr");
+
+        assertEquals(204, post("{\"from\": \"habr\"}",
+                "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)").statusCode());
+
+        assertEquals(botBefore + 1, visits("bot"));
+        assertEquals(habrBefore, visits("habr"));
+    }
+
     private double visits(String source) {
         return registry.get("pipoker.visits").tag("source", source).counter().count();
     }
 
     private HttpResponse<String> post(String json) throws Exception {
+        return post(json, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36");
+    }
+
+    private HttpResponse<String> post(String json, String userAgent) throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/visits"))
                 .header("Content-Type", "application/json")
+                .header("User-Agent", userAgent)
                 .POST(HttpRequest.BodyPublishers.ofString(json))
                 .build();
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
