@@ -65,7 +65,18 @@ class VisitApiIT {
         assertEquals(400, post("{\"from\": \"" + "x".repeat(65) + "\"}").statusCode());
 
         assertEquals(otherBefore + 1, visits("other_link"));
-        assertEquals(Source.values().length, registry.get("pipoker.visits").counters().size());
+        // Every source but the checks and tests, which are never counted
+        assertEquals(Source.values().length - 1, registry.get("pipoker.visits").counters().size());
+    }
+
+    @Test
+    @DisplayName("A check or a test is no visitor")
+    void testsAreNotCounted() throws Exception {
+        double before = registry.get("pipoker.visits").counters().stream().mapToDouble(counter -> counter.count()).sum();
+
+        assertEquals(204, post("{\"from\": \"test\"}").statusCode());
+
+        assertEquals(before, registry.get("pipoker.visits").counters().stream().mapToDouble(counter -> counter.count()).sum());
     }
 
     private double visits(String source) {
