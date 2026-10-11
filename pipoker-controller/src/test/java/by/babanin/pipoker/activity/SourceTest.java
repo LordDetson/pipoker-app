@@ -19,6 +19,7 @@ class SourceTest {
             "reddit, REDDIT",
             "hn, HACKER_NEWS",
             "devto, DEV_TO",
+            "youtube, YOUTUBE",
             "newsletter, OTHER_LINK",
     })
     void theFromParameterNamesTheChannel(String from, Source expected) {
@@ -38,8 +39,9 @@ class SourceTest {
             "https://old.reddit.com/r/agile/comments/1/, REDDIT",
             "https://news.ycombinator.com/item?id=1, HACKER_NEWS",
             "https://dev.to/detson/1, DEV_TO",
-            "https://www.youtube.com/watch?v=1, VIDEO",
-            "https://youtu.be/1, VIDEO",
+            "https://www.youtube.com/watch?v=1, YOUTUBE",
+            "https://youtu.be/1, YOUTUBE",
+            "https://rutube.ru/video/1/, VIDEO",
             "https://github.com/LordDetson/pipoker-web, GITHUB",
             "https://yandex.ru/search/?text=planning+poker, YANDEX",
             "https://ya.ru/, YANDEX",

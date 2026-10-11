@@ -32,6 +32,10 @@ public enum Source {
     REDDIT("reddit"),
     HACKER_NEWS("hn"),
     DEV_TO("devto"),
+    YOUTUBE("youtube"),
+    /**
+     * A video somewhere other than YouTube.
+     */
     VIDEO("video"),
     GITHUB("github"),
     YANDEX("yandex"),
@@ -61,6 +65,7 @@ public enum Source {
             Map.entry(REDDIT.tag, REDDIT),
             Map.entry(HACKER_NEWS.tag, HACKER_NEWS),
             Map.entry(DEV_TO.tag, DEV_TO),
+            Map.entry(YOUTUBE.tag, YOUTUBE),
             Map.entry(VIDEO.tag, VIDEO),
             Map.entry(GITHUB.tag, GITHUB));
 
@@ -85,8 +90,8 @@ public enum Source {
             Map.entry("redd.it", REDDIT),
             Map.entry("ycombinator.com", HACKER_NEWS),
             Map.entry("dev.to", DEV_TO),
-            Map.entry("youtube.com", VIDEO),
-            Map.entry("youtu.be", VIDEO),
+            Map.entry("youtube.com", YOUTUBE),
+            Map.entry("youtu.be", YOUTUBE),
             Map.entry("vkvideo.ru", VIDEO),
             Map.entry("rutube.ru", VIDEO),
             Map.entry("github.com", GITHUB),
