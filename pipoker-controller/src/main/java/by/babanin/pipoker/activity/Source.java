@@ -24,6 +24,10 @@ public enum Source {
     VK("vk"),
     INSTAGRAM("instagram"),
     BOOSTY("boosty"),
+    /**
+     * The author's support page, https://lorddetson.github.io/.
+     */
+    SUPPORT("support"),
     ALTERNATIVETO("alternativeto"),
     SAASHUB("saashub"),
     PRODUCT_HUNT("producthunt"),
@@ -64,6 +68,7 @@ public enum Source {
             Map.entry(VK.tag, VK),
             Map.entry(INSTAGRAM.tag, INSTAGRAM),
             Map.entry(BOOSTY.tag, BOOSTY),
+            Map.entry(SUPPORT.tag, SUPPORT),
             Map.entry(ALTERNATIVETO.tag, ALTERNATIVETO),
             Map.entry(SAASHUB.tag, SAASHUB),
             Map.entry(PRODUCT_HUNT.tag, PRODUCT_HUNT),
@@ -92,6 +97,7 @@ public enum Source {
             Map.entry("vkvideo.ru", VK),
             Map.entry("instagram.com", INSTAGRAM),
             Map.entry("boosty.to", BOOSTY),
+            Map.entry("lorddetson.github.io", SUPPORT),
             Map.entry("alternativeto.net", ALTERNATIVETO),
             Map.entry("saashub.com", SAASHUB),
             Map.entry("producthunt.com", PRODUCT_HUNT),
