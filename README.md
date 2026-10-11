@@ -54,7 +54,7 @@ A Spring Boot application on Java 25, built with Maven:
 | Module | What it holds |
 |--------|---------------|
 | `pipoker-service` | Rooms, participants, votes and rounds, kept in MongoDB. A room changes by atomic updates (`AtomicRoomRepository`), so people acting at the same moment don't overwrite each other. |
-| `pipoker-controller` | The runnable application. Clients talk to it over STOMP on the WebSocket endpoint `/ws`: they send commands to `/app/room/...` and receive the room's events from `/topic/room.{roomId}` through RabbitMQ, which serves as the STOMP broker. It also tracks who is still connected, closes idle rooms, accepts feedback at `/api/feedback`, counts visits by their source at `/api/visits` and serves metrics for the activity dashboard on the internal port 8081. |
+| `pipoker-controller` | The runnable application. Clients talk to it over STOMP on the WebSocket endpoint `/ws`: they send commands to `/app/room/...` and receive the room's events from `/topic/room.{roomId}` through RabbitMQ, which serves as the STOMP broker. It also tracks who is still connected, closes idle rooms, accepts feedback at `/api/feedback`, tells the page how to run the invisible human check asked for before feedback and a new room at `/api/human-check`, counts visits by their source at `/api/visits` and serves metrics for the activity dashboard on the internal port 8081. |
 
 ## Getting started
 
@@ -76,6 +76,8 @@ The easiest way to get the whole stack is `server/compose.yml` in
 | `STOMP_BROKER_SYSTEM_LOGIN`, `STOMP_BROKER_SYSTEM_PASS`, `STOMP_BROKER_USER_LOGIN`, `STOMP_BROKER_USER_PASS` | RabbitMQ credentials |
 | `MONGODB_HOST`, `MONGODB_PORT`, `MONGODB_DBNAME`, `MONGODB_USR`, `MONGODB_PASS` | MongoDB; the port is 27017 by default |
 | `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `JIRA_PROJECT`, `PIPOKER_ENV` | Where feedback from the site goes; without them it is only written to the log |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | The keys of a Cloudflare Turnstile widget: with them feedback is taken and rooms are created only for people who pass the invisible check; without them for everyone |
+| `HUMAN_CHECK_BYPASS_TOKEN` | A secret the server's own checks send in place of the human check token, to create rooms without a browser |
 
 ## Tests
 

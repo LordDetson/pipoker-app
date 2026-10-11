@@ -35,6 +35,8 @@ import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.ErrorCode;
 import by.babanin.pipoker.exception.PiPokerException;
+import by.babanin.pipoker.humancheck.HumanCheck;
+import by.babanin.pipoker.humancheck.NotHumanException;
 import by.babanin.pipoker.model.EstimateDto;
 import by.babanin.pipoker.model.ParticipantDto;
 import by.babanin.pipoker.model.RoomCreationDto;
@@ -56,27 +58,37 @@ import jakarta.validation.constraints.NotBlank;
 @MessageMapping(PiPokerApplication.ROOM_DESTINATION_PREFIX)
 public class RoomController {
 
+    // What the page runs the human check for before creating a room
+    static final String HUMAN_CHECK_ACTION = "room";
+
     private final RoomService roomService;
     private final RoomPresence roomPresence;
     private final SeatLocks seatLocks;
     private final RoomActivity activity;
     private final ModelMapper modelMapper;
     private final SimpMessageSendingOperations messagingTemplate;
+    private final HumanCheck humanCheck;
 
     public RoomController(RoomService roomService, RoomPresence roomPresence, SeatLocks seatLocks, RoomActivity activity,
-            ModelMapper modelMapper, SimpMessageSendingOperations messagingTemplate) {
+            ModelMapper modelMapper, SimpMessageSendingOperations messagingTemplate, HumanCheck humanCheck) {
         this.roomService = roomService;
         this.roomPresence = roomPresence;
         this.seatLocks = seatLocks;
         this.activity = activity;
         this.modelMapper = modelMapper;
         this.messagingTemplate = messagingTemplate;
+        this.humanCheck = humanCheck;
     }
 
     @MessageMapping("/create")
     @SendToUser(destinations = PiPokerApplication.TOPIC_ROOM_CREATED_DESTINATION, broadcast = false)
     RoomDto create(@Valid RoomCreationDto roomCreationDto,
             @Header(SimpMessageHeaderAccessor.SESSION_ID_HEADER) String sessionId) {
+        // Only creating a room is checked: joining needs a room someone created, and the people in it see who joins.
+        // The browser's address isn't known on the WebSocket, and Cloudflare doesn't need it.
+        if(!humanCheck.passed(roomCreationDto.getHumanCheckToken(), HUMAN_CHECK_ACTION, null)) {
+            throw new NotHumanException(HUMAN_CHECK_ACTION);
+        }
         Deck deck = modelMapper.map(roomCreationDto.getDeck(), Deck.class);
         Set<Participant> participants = roomCreationDto.getParticipants().stream()
                 .map(participantDto -> modelMapper.map(participantDto, Participant.class))

@@ -3,16 +3,21 @@ package by.babanin.pipoker.feedback;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -25,6 +30,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import by.babanin.pipoker.IntegrationTestContainers;
+import by.babanin.pipoker.humancheck.HumanCheck;
 
 /**
  * Sends feedback to the running application the way the web client does, from behind the proxy
@@ -40,7 +46,7 @@ class FeedbackApiIT {
     private static final String PROBLEM = """
             {"kind": "problem", "message": "The cards don't turn over", "contact": "@alex", "page": "https://pipoker.duckdns.org/",
              "language": "ru", "screen": "1920x1080", "voters": 4, "watchers": 1, "voted": 2,
-             "round": "revealed", "estimate": "3", "unknown": "ignored"}""";
+             "round": "revealed", "estimate": "3", "humanCheckToken": "token-1", "unknown": "ignored"}""";
 
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {
@@ -53,7 +59,15 @@ class FeedbackApiIT {
     @MockitoBean
     private FeedbackSender sender;
 
+    @MockitoBean
+    private HumanCheck humanCheck;
+
     private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    @BeforeEach
+    void person() {
+        when(humanCheck.passed(eq("token-1"), eq("feedback"), anyString())).thenReturn(true);
+    }
 
     @Test
     @DisplayName("Feedback is passed on to the owner")
@@ -108,6 +122,32 @@ class FeedbackApiIT {
 
         // When, then
         assertEquals(503, post(PROBLEM, "4.4.4.4").statusCode());
+    }
+
+    @Test
+    @DisplayName("Feedback that doesn't pass the human check isn't taken, and the page learns why")
+    void notHuman() throws Exception {
+        // Given
+        when(humanCheck.passed("token-1", "feedback", "6.6.6.6")).thenReturn(false);
+
+        // When, then
+        assertEquals(403, post(PROBLEM, "6.6.6.6").statusCode());
+        verify(sender, never()).send(any());
+    }
+
+    @Test
+    @DisplayName("The page learns the key to run the human check with")
+    void humanCheckSiteKey() throws Exception {
+        // Given
+        when(humanCheck.siteKey()).thenReturn(Optional.of("site-1"));
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/human-check")).build();
+
+        // When
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        // Then
+        assertEquals(200, response.statusCode());
+        assertEquals("{\"siteKey\":\"site-1\"}", response.body());
     }
 
     private HttpResponse<String> post(String body, String browserAddress) throws Exception {

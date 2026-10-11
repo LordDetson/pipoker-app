@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import by.babanin.pipoker.humancheck.NotHumanException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.log4j.Log4j2;
@@ -39,6 +40,12 @@ public class FeedbackController {
     @ResponseStatus(HttpStatus.TOO_MANY_REQUESTS)
     void tooMuchFeedback() {
         // The page tells the person to try again later
+    }
+
+    @ExceptionHandler(NotHumanException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    void notHuman() {
+        // The page tells the person to reload it and try again
     }
 
     @ExceptionHandler(FeedbackDeliveryException.class)

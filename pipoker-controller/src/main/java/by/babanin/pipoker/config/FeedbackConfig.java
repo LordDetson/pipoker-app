@@ -15,6 +15,7 @@ import by.babanin.pipoker.feedback.FeedbackSender;
 import by.babanin.pipoker.feedback.FeedbackService;
 import by.babanin.pipoker.feedback.JiraFeedbackSender;
 import by.babanin.pipoker.feedback.LoggingFeedbackSender;
+import by.babanin.pipoker.humancheck.HumanCheck;
 import lombok.extern.log4j.Log4j2;
 
 @Configuration
@@ -22,13 +23,13 @@ import lombok.extern.log4j.Log4j2;
 public class FeedbackConfig {
 
     @Bean
-    FeedbackService feedbackService(FeedbackSender feedbackSender,
+    FeedbackService feedbackService(FeedbackSender feedbackSender, HumanCheck humanCheck,
             @Value("${feedback.limit-per-address}") int limitPerAddress,
             @Value("${feedback.limit-in-total}") int limitInTotal,
             @Value("${feedback.limit-window}") Duration limitWindow) {
         FeedbackRateLimiter rateLimiter = new FeedbackRateLimiter(limitPerAddress, limitInTotal, limitWindow,
                 Clock.systemUTC());
-        return new FeedbackService(rateLimiter, feedbackSender);
+        return new FeedbackService(rateLimiter, humanCheck, feedbackSender);
     }
 
     // Feedback becomes Jira issues once the server is given the site and an API token; until then it is only logged
