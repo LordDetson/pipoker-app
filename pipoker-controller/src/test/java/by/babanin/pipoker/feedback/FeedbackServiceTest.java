@@ -10,18 +10,23 @@ import static org.mockito.Mockito.when;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import by.babanin.pipoker.humancheck.HumanCheck;
+
 class FeedbackServiceTest {
 
     private final FeedbackRateLimiter rateLimiter = mock(FeedbackRateLimiter.class);
+    private final HumanCheck humanCheck = mock(HumanCheck.class);
     private final FeedbackSender sender = mock(FeedbackSender.class);
-    private final FeedbackService service = new FeedbackService(rateLimiter, sender);
-    private final FeedbackDto feedback = FeedbackDto.builder().kind(FeedbackKind.PROBLEM).message("Broken").build();
+    private final FeedbackService service = new FeedbackService(rateLimiter, humanCheck, sender);
+    private final FeedbackDto feedback = FeedbackDto.builder().kind(FeedbackKind.PROBLEM).message("Broken")
+            .humanCheckToken("token-1").build();
 
     @Test
     @DisplayName("Feedback within the limits goes to the owner")
     void withinLimits() {
         // Given
         when(rateLimiter.tryAcquire("1.1.1.1")).thenReturn(true);
+        when(humanCheck.passed("token-1", "feedback", "1.1.1.1")).thenReturn(true);
 
         // When
         service.send(feedback, "1.1.1.1");
@@ -38,6 +43,19 @@ class FeedbackServiceTest {
 
         // When, then
         assertThrows(TooMuchFeedbackException.class, () -> service.send(feedback, "1.1.1.1"));
+        verify(humanCheck, never()).passed(any(), any(), any());
+        verify(sender, never()).send(any());
+    }
+
+    @Test
+    @DisplayName("Feedback that doesn't pass the human check isn't sent")
+    void notHuman() {
+        // Given
+        when(rateLimiter.tryAcquire("1.1.1.1")).thenReturn(true);
+        when(humanCheck.passed("token-1", "feedback", "1.1.1.1")).thenReturn(false);
+
+        // When, then
+        assertThrows(NotHumanException.class, () -> service.send(feedback, "1.1.1.1"));
         verify(sender, never()).send(any());
     }
 }

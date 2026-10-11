@@ -81,4 +81,9 @@ public class FeedbackDto {
 
     @Size(max = 60)
     private String timeZone;
+
+    // What the human check gave the page (see HumanCheck); it isn't part of the feedback, so it stays out of the log
+    @Size(max = 2048)
+    @ToString.Exclude
+    private String humanCheckToken;
 }

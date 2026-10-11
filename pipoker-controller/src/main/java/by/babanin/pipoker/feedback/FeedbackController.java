@@ -41,6 +41,12 @@ public class FeedbackController {
         // The page tells the person to try again later
     }
 
+    @ExceptionHandler(NotHumanException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    void notHuman() {
+        // The page tells the person to reload it and try again
+    }
+
     @ExceptionHandler(FeedbackDeliveryException.class)
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     void notDelivered(FeedbackDeliveryException e) {
