@@ -2,18 +2,25 @@ package by.babanin.pipoker.activity;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 
+import by.babanin.pipoker.service.RoomRemovedEvent;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 
 /**
- * Counts what people do in the rooms, for the activity dashboard. Nothing about who they are is kept:
+ * Counts what people do in the rooms, for the activity dashboard. The metrics keep nothing about who they are:
  * no nicknames, room names or room ids, only how many times something happened, and for visits and new rooms
  * where the person came from (see {@link Source}).
+ * <p>
+ * PiPoker's own checks and automated tests are no visitors: their visits and everything in the rooms they create
+ * ({@link Source#TEST}) are left out, so the dashboard shows real people only.
  * <p>
  * The counters start from zero when the backend starts. Prometheus scrapes them from {@code /actuator/prometheus}
  * on the management port and takes care of the restarts.
@@ -36,12 +43,18 @@ public class RoomActivity {
     private final Counter tasks;
     private final Counter estimates;
     private final Map<LeaveReason, Counter> leaves = new EnumMap<>(LeaveReason.class);
+    // Kept in memory only: a test room lives for seconds or minutes, so a backend restart while one is open is rare,
+    // and then that room is counted like any other
+    private final Set<UUID> testRooms = ConcurrentHashMap.newKeySet();
 
     public RoomActivity(MeterRegistry registry) {
         connections = Counter.builder("pipoker.connections")
                 .description("Connections opened by browsers, including page refreshes and reconnects")
                 .register(registry);
         for(Source source : Source.values()) {
+            if(source == Source.TEST) {
+                continue;
+            }
             visits.put(source, Counter.builder("pipoker.visits")
                     .description("Start page opened, by where the person came from")
                     .tag("source", source.tag())
@@ -92,51 +105,90 @@ public class RoomActivity {
     }
 
     public void visited(Source source) {
-        visits.get(source).increment();
+        if(source != Source.TEST) {
+            visits.get(source).increment();
+        }
     }
 
-    public void roomCreated(Source source) {
-        roomsCreated.get(source).increment();
+    public void roomCreated(UUID roomId, Source source) {
+        if(source == Source.TEST) {
+            testRooms.add(roomId);
+        }
+        else {
+            roomsCreated.get(source).increment();
+        }
     }
 
-    public void joined(boolean watcher) {
-        (watcher ? watchersJoined : votersJoined).increment();
+    /**
+     * Whether the room was created by a check or a test, so nothing in it is counted.
+     */
+    public boolean isTestRoom(UUID roomId) {
+        return testRooms.contains(roomId);
     }
 
-    public void roleChanged(boolean watcher) {
-        (watcher ? becameWatchers : becameVoters).increment();
+    /**
+     * Test rooms that still exist.
+     */
+    public int testRoomCount() {
+        return testRooms.size();
     }
 
-    public void left(LeaveReason reason) {
-        leaves.get(reason).increment();
+    @EventListener
+    public void roomRemoved(RoomRemovedEvent event) {
+        roomClosed(event.roomId());
     }
 
-    public void returned() {
-        returns.increment();
+    /**
+     * The room was deleted.
+     */
+    public void roomClosed(UUID roomId) {
+        testRooms.remove(roomId);
     }
 
-    public void voted() {
-        votes.increment();
+    public void joined(UUID roomId, boolean watcher) {
+        count(roomId, watcher ? watchersJoined : votersJoined);
     }
 
-    public void revealed() {
-        reveals.increment();
+    public void roleChanged(UUID roomId, boolean watcher) {
+        count(roomId, watcher ? becameWatchers : becameVoters);
     }
 
-    public void cleared() {
-        clears.increment();
+    public void left(UUID roomId, LeaveReason reason) {
+        count(roomId, leaves.get(reason));
     }
 
-    public void timerStarted() {
-        timers.increment();
+    public void returned(UUID roomId) {
+        count(roomId, returns);
     }
 
-    public void taskNamed() {
-        tasks.increment();
+    public void voted(UUID roomId) {
+        count(roomId, votes);
     }
 
-    public void estimateAccepted() {
-        estimates.increment();
+    public void revealed(UUID roomId) {
+        count(roomId, reveals);
+    }
+
+    public void cleared(UUID roomId) {
+        count(roomId, clears);
+    }
+
+    public void timerStarted(UUID roomId) {
+        count(roomId, timers);
+    }
+
+    public void taskNamed(UUID roomId) {
+        count(roomId, tasks);
+    }
+
+    public void estimateAccepted(UUID roomId) {
+        count(roomId, estimates);
+    }
+
+    private void count(UUID roomId, Counter counter) {
+        if(!isTestRoom(roomId)) {
+            counter.increment();
+        }
     }
 
     private static Counter joined(MeterRegistry registry, String role) {

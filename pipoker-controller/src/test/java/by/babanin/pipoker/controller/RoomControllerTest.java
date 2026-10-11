@@ -167,9 +167,9 @@ class RoomControllerTest {
         // The creator's connection holds the seats of the people in the new room
         Mockito.verify(roomPresence).hold(eq(room.getId()), eq("Dmitry"), anyString());
         Mockito.verify(roomPresence).hold(eq(room.getId()), eq("Alex"), anyString());
-        Mockito.verify(activity).roomCreated(Source.HABR);
-        Mockito.verify(activity).joined(false);
-        Mockito.verify(activity).joined(true);
+        Mockito.verify(activity).roomCreated(room.getId(), Source.HABR);
+        Mockito.verify(activity).joined(room.getId(), false);
+        Mockito.verify(activity).joined(room.getId(), true);
     }
 
     @Test
@@ -192,7 +192,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, expectedResult), results.poll()));
         Mockito.verify(roomPresence).hold(eq(roomId), eq("Dmitry"), anyString());
-        Mockito.verify(activity).joined(false);
+        Mockito.verify(activity).joined(roomId, false);
     }
 
     @Test
@@ -215,7 +215,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, expectedResult), results.poll()));
         Mockito.verify(roomPresence).forget(roomId, "Dmitry");
-        Mockito.verify(activity).left(LeaveReason.LEFT);
+        Mockito.verify(activity).left(roomId, LeaveReason.LEFT);
         // The others may have waited only for the one who left
         Mockito.verify(roomPresence).revealIfEveryoneVoted(roomId);
     }
@@ -277,7 +277,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(
                         new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, new ParticipantDto("Dmitry", true)), results.poll()));
-        Mockito.verify(activity).returned();
+        Mockito.verify(activity).returned(roomId);
     }
 
     @Test
@@ -301,7 +301,7 @@ class RoomControllerTest {
         // Then
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.VOTE_ADDED, expectedResult), results.poll()));
-        Mockito.verify(activity).voted();
+        Mockito.verify(activity).voted(roomId);
         // The last vote reveals the cards, once it is told to the room
         Mockito.verify(roomPresence).revealIfEveryoneVoted(roomId);
     }
@@ -357,7 +357,7 @@ class RoomControllerTest {
                         new RoomEvent(roomId, EventType.VOTE_REMOVED, new VoteDto("Dmitry", "1d")),
                         new RoomEvent(roomId, EventType.PARTICIPANT_ROLE_CHANGED, new ParticipantDto("Dmitry", true))
                 ), List.copyOf(results)));
-        Mockito.verify(activity).roleChanged(true);
+        Mockito.verify(activity).roleChanged(roomId, true);
         // A watcher isn't waited for
         Mockito.verify(roomPresence).revealIfEveryoneVoted(roomId);
     }
@@ -379,7 +379,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(
                         new RoomEvent(roomId, EventType.PARTICIPANT_ROLE_CHANGED, new ParticipantDto("Dmitry", false)), results.poll()));
-        Mockito.verify(activity).roleChanged(false);
+        Mockito.verify(activity).roleChanged(roomId, false);
     }
 
     @Test
@@ -400,7 +400,7 @@ class RoomControllerTest {
         InOrder inOrder = Mockito.inOrder(roomPresence, roomService);
         inOrder.verify(roomPresence).votesCleared(roomId);
         inOrder.verify(roomService).clearVotes(roomId);
-        Mockito.verify(activity).cleared();
+        Mockito.verify(activity).cleared(roomId);
     }
 
     @Test
@@ -453,7 +453,7 @@ class RoomControllerTest {
         await().atMost(1, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertEquals(new RoomEvent(roomId, EventType.SHOW_VOTES, expectedRound), results.poll()));
         Mockito.verify(roomService, times(1)).showVotes(roomId);
-        Mockito.verify(activity).revealed();
+        Mockito.verify(activity).revealed(roomId);
     }
 
     @Test

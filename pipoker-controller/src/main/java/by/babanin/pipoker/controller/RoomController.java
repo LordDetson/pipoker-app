@@ -82,10 +82,10 @@ public class RoomController {
                 .map(participantDto -> modelMapper.map(participantDto, Participant.class))
                 .collect(Collectors.toUnmodifiableSet());
         Room room = roomService.create(roomCreationDto.getName(), deck, participants);
-        activity.roomCreated(Source.of(roomCreationDto.getSource()));
+        activity.roomCreated(room.getId(), Source.of(roomCreationDto.getSource()));
         room.getParticipants().forEach(participant -> {
             roomPresence.hold(room.getId(), participant.getNickname(), sessionId);
-            activity.joined(participant.isWatcher());
+            activity.joined(room.getId(), participant.isWatcher());
         });
         RoomDto result = modelMapper.map(room, RoomDto.class);
         modelMapper.validate();
@@ -110,7 +110,7 @@ public class RoomController {
                     ? roomService.addWatcher(roomId, nickname)
                     : roomService.addParticipant(roomId, nickname);
             roomPresence.hold(roomId, added.getNickname(), sessionId);
-            activity.joined(added.isWatcher());
+            activity.joined(roomId, added.isWatcher());
             ParticipantDto result = modelMapper.map(added, ParticipantDto.class);
             modelMapper.validate();
             tellRoom(new RoomEvent(roomId, EventType.PARTICIPANT_ADDED, result));
@@ -122,7 +122,7 @@ public class RoomController {
         seatLocks.change(roomId, nickname, () -> {
             ParticipantDto result = roomService.removeParticipant(roomId, nickname)
                     .map(participant -> {
-                        activity.left(LeaveReason.LEFT);
+                        activity.left(roomId, LeaveReason.LEFT);
                         return modelMapper.map(participant, ParticipantDto.class);
                     })
                     .orElse(null);
@@ -140,7 +140,7 @@ public class RoomController {
         String nickname = participantDto.getNickname();
         seatLocks.change(roomId, nickname, () -> {
             RoleChange change = roomService.changeRole(roomId, nickname, participantDto.isWatcher());
-            activity.roleChanged(change.participant().isWatcher());
+            activity.roleChanged(roomId, change.participant().isWatcher());
             if(change.takenBackVote() != null) {
                 tellRoom(new RoomEvent(roomId, EventType.VOTE_REMOVED, modelMapper.map(change.takenBackVote(), VoteDto.class)));
             }
@@ -158,7 +158,7 @@ public class RoomController {
     RoomEvent returnParticipant(@DestinationVariable UUID roomId, @NotBlank String nickname,
             @Header(SimpMessageHeaderAccessor.SESSION_ID_HEADER) String sessionId) {
         Participant participant = roomPresence.returnTo(roomId, nickname, sessionId);
-        activity.returned();
+        activity.returned(roomId);
         ParticipantDto result = modelMapper.map(participant, ParticipantDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.PARTICIPANT_RETURNED, result);
@@ -168,7 +168,7 @@ public class RoomController {
     @MessageMapping({ "/{roomId}/votes/add", "/{roomId}/vote" })
     void addVote(@DestinationVariable UUID roomId, @Valid VoteDto vote) {
         Vote added = roomService.addVote(roomId, vote.getNickname(), vote.getCard());
-        activity.voted();
+        activity.voted(roomId);
         VoteDto result = modelMapper.map(added, VoteDto.class);
         modelMapper.validate();
         tellRoom(new RoomEvent(roomId, EventType.VOTE_ADDED, result));
@@ -192,7 +192,7 @@ public class RoomController {
         // either they come back without it, or their vote is cleared with the others
         roomPresence.votesCleared(roomId);
         Task task = roomService.clearVotes(roomId);
-        activity.cleared();
+        activity.cleared(roomId);
         TaskDto result = task == null ? null : modelMapper.map(task, TaskDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.CLEAR_VOTES, result);
@@ -204,7 +204,7 @@ public class RoomController {
         RoundDto round = roomService.showVotes(roomId)
                 .map(recorded -> modelMapper.map(recorded, RoundDto.class))
                 .orElse(null);
-        activity.revealed();
+        activity.revealed(roomId);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.SHOW_VOTES, round);
     }
@@ -217,7 +217,7 @@ public class RoomController {
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent startTimer(@DestinationVariable UUID roomId, TimerDto timerDto) {
         Timer started = roomService.startTimer(roomId, Duration.ofSeconds(timerDto.getSeconds()));
-        activity.timerStarted();
+        activity.timerStarted(roomId);
         TimerDto result = modelMapper.map(started, TimerDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.TIMER_STARTED, result);
@@ -236,7 +236,7 @@ public class RoomController {
     RoomEvent setTask(@DestinationVariable UUID roomId, TaskDto taskDto) {
         Task task = roomService.setTask(roomId, taskDto.getName(), taskDto.getUrl());
         if(task != null) {
-            activity.taskNamed();
+            activity.taskNamed(roomId);
         }
         TaskDto result = task == null ? null : modelMapper.map(task, TaskDto.class);
         modelMapper.validate();
@@ -247,7 +247,7 @@ public class RoomController {
     @SendTo(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + ".{roomId}")
     RoomEvent acceptEstimate(@DestinationVariable UUID roomId, @Valid EstimateDto estimateDto) {
         Round accepted = roomService.acceptEstimate(roomId, estimateDto.getRevealedAt(), estimateDto.getCard());
-        activity.estimateAccepted();
+        activity.estimateAccepted(roomId);
         RoundDto result = modelMapper.map(accepted, RoundDto.class);
         modelMapper.validate();
         return new RoomEvent(roomId, EventType.ESTIMATE_ACCEPTED, result);
