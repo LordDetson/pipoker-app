@@ -18,11 +18,12 @@ public class HumanCheckConfig {
     // The check is on once the server is given both keys of a Turnstile widget; until then every request passes
     @Bean
     HumanCheck humanCheck(@Value("${human-check.turnstile.site-key}") String siteKey,
-            @Value("${human-check.turnstile.secret-key}") String secretKey) {
+            @Value("${human-check.turnstile.secret-key}") String secretKey,
+            @Value("${human-check.bypass-token}") String bypassToken) {
         if(Stream.of(siteKey, secretKey).anyMatch(String::isBlank)) {
             log.warn("The human check isn't set up (TURNSTILE_SITE_KEY, TURNSTILE_SECRET_KEY), every request passes");
             return new NoHumanCheck();
         }
-        return new TurnstileHumanCheck(siteKey, secretKey);
+        return new TurnstileHumanCheck(siteKey, secretKey, bypassToken);
     }
 }

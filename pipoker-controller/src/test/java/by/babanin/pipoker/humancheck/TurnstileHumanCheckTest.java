@@ -24,7 +24,7 @@ class TurnstileHumanCheckTest {
 
     private final RestClient.Builder restClientBuilder = RestClient.builder();
     private final MockRestServiceServer cloudflare = MockRestServiceServer.bindTo(restClientBuilder).build();
-    private final TurnstileHumanCheck check = new TurnstileHumanCheck(restClientBuilder, "site-1", "secret-1");
+    private final TurnstileHumanCheck check = new TurnstileHumanCheck(restClientBuilder, "site-1", "secret-1", "bypass-1");
 
     private void cloudflareAnswers(String verdict) {
         cloudflare.expect(requestTo(TurnstileHumanCheck.VERIFY_URL))
@@ -63,6 +63,29 @@ class TurnstileHumanCheckTest {
 
         // When, then
         assertFalse(check.passed("token-1", "feedback", "1.1.1.1"));
+    }
+
+    @Test
+    @DisplayName("The server's own checks pass with the bypass token, and Cloudflare isn't asked")
+    void bypass() {
+        // When, then
+        assertTrue(check.passed("bypass-1", "room", null));
+        cloudflare.verify();
+    }
+
+    @Test
+    @DisplayName("Without a bypass token nothing skips the check")
+    void noBypass() {
+        // Given
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo(TurnstileHumanCheck.VERIFY_URL)).andRespond(withSuccess("""
+                {"success": false, "error-codes": ["invalid-input-response"]}""", MediaType.APPLICATION_JSON));
+        TurnstileHumanCheck withoutBypass = new TurnstileHumanCheck(builder, "site-1", "secret-1", "");
+
+        // When, then
+        assertFalse(withoutBypass.passed("", "room", null));
+        assertFalse(withoutBypass.passed("anything", "room", null));
     }
 
     @Test

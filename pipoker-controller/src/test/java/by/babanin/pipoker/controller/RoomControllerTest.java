@@ -4,6 +4,7 @@ import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
@@ -20,6 +21,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
@@ -46,6 +49,7 @@ import by.babanin.pipoker.entity.Room;
 import by.babanin.pipoker.entity.Round;
 import by.babanin.pipoker.entity.Vote;
 import by.babanin.pipoker.event.ErrorEvent;
+import by.babanin.pipoker.humancheck.HumanCheck;
 import by.babanin.pipoker.event.RoomEvent;
 import by.babanin.pipoker.event.RoomEvent.EventType;
 import by.babanin.pipoker.exception.ConstraintException;
@@ -85,6 +89,9 @@ class RoomControllerTest {
     @MockitoBean
     private RoomActivity activity;
 
+    @MockitoBean
+    private HumanCheck humanCheck;
+
     @Autowired
     private WebSocketStompClient webSocketStompClient;
 
@@ -110,6 +117,34 @@ class RoomControllerTest {
     static void tearDownAfterAll() {
         running.close();
     }*/
+
+    @BeforeEach
+    void person() {
+        Mockito.when(humanCheck.passed(any(), any(), any())).thenReturn(true);
+    }
+
+    @Test
+    @DisplayName("A room isn't created for a robot, and the page learns why")
+    void createForRobot() throws Exception {
+        // Given
+        Mockito.when(humanCheck.passed("robot", "room", null)).thenReturn(false);
+        Deck deck = new Deck();
+        deck.add("1d");
+
+        // When
+        String destination = appDestination("/create");
+        Queue<ErrorEvent> results = buildUserSession(ErrorEvent.class, PiPokerApplication.TOPIC_ROOM_ERRORS_DESTINATION)
+                .send(destination, RoomCreationDto.builder()
+                        .name("test")
+                        .deck(modelMapper.map(deck, DeckDto.class))
+                        .humanCheckToken("robot")
+                        .build());
+
+        // Then
+        await().atMost(1, TimeUnit.SECONDS).untilAsserted(() -> assertEquals(
+                new ErrorEvent(destination, "The human check didn't pass for room", ErrorCode.NOT_HUMAN), results.poll()));
+        Mockito.verify(roomService, Mockito.never()).create(any(), any(), any());
+    }
 
     @Test
     void createWithoutParticipants() throws Exception {

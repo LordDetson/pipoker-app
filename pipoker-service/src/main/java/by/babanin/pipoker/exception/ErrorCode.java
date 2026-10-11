@@ -49,6 +49,11 @@ public enum ErrorCode {
     INVALID_DATA,
 
     /**
+     * The human check says a robot sent the request (see HumanCheck in pipoker-controller).
+     */
+    NOT_HUMAN,
+
+    /**
      * Anything else: a bug or a failure on the server rather than something the person can fix.
      */
     UNEXPECTED

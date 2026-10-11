@@ -11,6 +11,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import by.babanin.pipoker.humancheck.HumanCheck;
+import by.babanin.pipoker.humancheck.NotHumanException;
 
 class FeedbackServiceTest {
 

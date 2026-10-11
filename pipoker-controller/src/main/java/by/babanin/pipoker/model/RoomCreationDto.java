@@ -39,4 +39,8 @@ public class RoomCreationDto {
     // Where the creator came to the site from, for the activity dashboard; left out by older pages
     @Valid
     private VisitDto source;
+
+    // What the human check gave the page (see HumanCheck); the server's own checks send the bypass token instead
+    @Size(max = 2048)
+    private String humanCheckToken;
 }

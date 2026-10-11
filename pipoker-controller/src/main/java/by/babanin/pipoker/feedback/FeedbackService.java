@@ -1,6 +1,7 @@
 package by.babanin.pipoker.feedback;
 
 import by.babanin.pipoker.humancheck.HumanCheck;
+import by.babanin.pipoker.humancheck.NotHumanException;
 
 /**
  * Takes feedback from the site, within the limits and from people only, and passes it on to the owner.
@@ -32,7 +33,7 @@ public class FeedbackService {
         }
         // After the limits, so that a flood of requests doesn't turn into a flood of questions to the check
         if(!humanCheck.passed(feedback.getHumanCheckToken(), HUMAN_CHECK_ACTION, address)) {
-            throw new NotHumanException();
+            throw new NotHumanException(HUMAN_CHECK_ACTION);
         }
         sender.send(feedback);
     }

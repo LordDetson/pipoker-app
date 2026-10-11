@@ -2,6 +2,8 @@ package by.babanin.pipoker.humancheck;
 
 import java.net.ProxySelector;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -22,6 +24,9 @@ import lombok.extern.log4j.Log4j2;
 /**
  * Cloudflare Turnstile: the page runs Cloudflare's check with the site key, and the server asks Cloudflare, with the
  * secret key, whether the token the page got is a person's. A token passes once and only for a few minutes.
+ * The server's own checks, which create rooms without a browser (the monitoring of PROD, the load tests), send the
+ * bypass token in place of Cloudflare's token; it is a secret of the server like the secret key.
+ * <p>
  * The action the page names goes to Cloudflare's analytics; it isn't checked here, because Cloudflare's test keys,
  * which QA runs with, answer without it.
  * <p>
@@ -45,15 +50,18 @@ public class TurnstileHumanCheck implements HumanCheck {
     private final RestClient restClient;
     private final String siteKey;
     private final String secretKey;
+    // Empty when nothing may skip the check
+    private final byte[] bypassToken;
 
-    public TurnstileHumanCheck(String siteKey, String secretKey) {
-        this(RestClient.builder().requestFactory(requestFactory()), siteKey, secretKey);
+    public TurnstileHumanCheck(String siteKey, String secretKey, String bypassToken) {
+        this(RestClient.builder().requestFactory(requestFactory()), siteKey, secretKey, bypassToken);
     }
 
-    TurnstileHumanCheck(RestClient.Builder restClientBuilder, String siteKey, String secretKey) {
+    TurnstileHumanCheck(RestClient.Builder restClientBuilder, String siteKey, String secretKey, String bypassToken) {
         this.restClient = restClientBuilder.build();
         this.siteKey = siteKey;
         this.secretKey = secretKey;
+        this.bypassToken = bypassToken.getBytes(StandardCharsets.UTF_8);
     }
 
     private static JdkClientHttpRequestFactory requestFactory() {
@@ -76,6 +84,10 @@ public class TurnstileHumanCheck implements HumanCheck {
         if(token == null || token.isBlank() || token.length() > TOKEN_MAX_LENGTH) {
             log.info("A request for {} came without a human check token", action);
             return false;
+        }
+        // Compared in constant time, so the time of the answer doesn't tell how much of a guess was right
+        if(bypassToken.length > 0 && MessageDigest.isEqual(bypassToken, token.getBytes(StandardCharsets.UTF_8))) {
+            return true;
         }
         Verdict verdict;
         try {
