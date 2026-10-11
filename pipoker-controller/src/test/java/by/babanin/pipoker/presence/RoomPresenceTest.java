@@ -155,9 +155,9 @@ class RoomPresenceTest {
         verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
                 new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
         // The leaving counts once it is too late to come back
-        verify(activity, never()).left(any());
+        verify(activity, never()).left(any(), any());
         scheduler.advance(GRACE_PERIOD);
-        verify(activity).left(LeaveReason.PAGE_CLOSED);
+        verify(activity).left(any(), eq(LeaveReason.PAGE_CLOSED));
         verify(messagingTemplate, times(1)).convertAndSend(anyString(), any(Object.class));
         assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
     }
@@ -187,7 +187,7 @@ class RoomPresenceTest {
 
         assertEquals(List.of(Participant.createParticipant("Alex")), steppedAway);
         assertEquals(0, presence.peopleOnline());
-        verify(activity, never()).left(any());
+        verify(activity, never()).left(any(), any());
         verify(roomService, never()).removeParticipant(any(), anyString());
         verify(roomService, never()).bringBack(any(), any());
         assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
@@ -218,7 +218,7 @@ class RoomPresenceTest {
                 new RoomEvent(room.getId(), EventType.VOTE_ADDED, new VoteDto("Alex", "1")));
         scheduler.advance(LATER);
         assertTrue(room.containsParticipant("Alex"));
-        verify(activity, never()).left(any());
+        verify(activity, never()).left(any(), any());
     }
 
     @Test
@@ -261,7 +261,7 @@ class RoomPresenceTest {
                 new RoomEvent(room.getId(), EventType.VOTE_ADDED, new VoteDto("Alex", "1")));
         scheduler.advance(LATER);
         assertTrue(room.containsParticipant("Alex"));
-        verify(activity, never()).left(any());
+        verify(activity, never()).left(any(), any());
     }
 
     @Test
@@ -296,12 +296,12 @@ class RoomPresenceTest {
         assertThrows(RoomServiceException.class, () -> presence.returnTo(room.getId(), "Alex", "alex-tab-after-refresh"));
 
         assertTrue(room.getParticipant("Alex").isWatcher());
-        verify(activity).left(LeaveReason.PAGE_CLOSED);
+        verify(activity).left(any(), eq(LeaveReason.PAGE_CLOSED));
         // The failed attempt holds no seat
         presence.disconnected(disconnect("alex-tab-after-refresh", CloseStatus.NORMAL));
         scheduler.advance(LATER);
         assertTrue(room.containsParticipant("Alex"));
-        verify(activity, times(1)).left(any());
+        verify(activity, times(1)).left(any(), any());
     }
 
     @Test
@@ -354,7 +354,7 @@ class RoomPresenceTest {
         assertFalse(room.containsParticipant("Alex"));
         verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
                 new RoomEvent(room.getId(), EventType.PARTICIPANT_REMOVED, new ParticipantDto("Alex", false)));
-        verify(activity).left(LeaveReason.CONNECTION_LOST);
+        verify(activity).left(any(), eq(LeaveReason.CONNECTION_LOST));
     }
 
     @Test
@@ -475,7 +475,7 @@ class RoomPresenceTest {
         scheduler.advance(LATER);
 
         verify(messagingTemplate, never()).convertAndSend(anyString(), any(Object.class));
-        verify(activity, never()).left(any());
+        verify(activity, never()).left(any(), any());
     }
 
     @Test
@@ -493,7 +493,7 @@ class RoomPresenceTest {
 
         assertTrue(room.containsParticipant("Dmitry"));
         assertFalse(room.containsParticipant("Alex"));
-        verify(activity).left(LeaveReason.RESTART);
+        verify(activity).left(any(), eq(LeaveReason.RESTART));
     }
 
     @Test
@@ -530,6 +530,15 @@ class RoomPresenceTest {
     }
 
     @Test
+    @DisplayName("People in the room of a check or a test aren't online")
+    void peopleOnlineLeavesOutTestRooms() {
+        presence.hold(room.getId(), "Dmitry", "dmitry-tab");
+        when(activity.isTestRoom(room.getId())).thenReturn(true);
+
+        assertEquals(0, presence.peopleOnline());
+    }
+
+    @Test
     @DisplayName("The cards are revealed by themselves once everyone at the table has voted")
     void revealsWhenEveryoneVoted() {
         room.addVote("Dmitry", "1");
@@ -544,7 +553,7 @@ class RoomPresenceTest {
         assertTrue(room.isVotesShown());
         verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(), new RoomEvent(room.getId(),
                 EventType.SHOW_VOTES, new RoundDto(REVEALED_AT, List.of(new VoteDto("Dmitry", "1"), new VoteDto("Alex", "1")))));
-        verify(activity).revealed();
+        verify(activity).revealed(any());
     }
 
     @Test

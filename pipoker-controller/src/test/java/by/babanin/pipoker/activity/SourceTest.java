@@ -13,6 +13,7 @@ class SourceTest {
             "TG, TELEGRAM",
             "' boosty ', BOOSTY",
             "video, VIDEO",
+            "test, TEST",
             "newsletter, OTHER_LINK",
     })
     void theFromParameterNamesTheChannel(String from, Source expected) {

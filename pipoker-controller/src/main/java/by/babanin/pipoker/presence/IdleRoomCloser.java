@@ -71,7 +71,8 @@ public class IdleRoomCloser {
         UUID roomId = room.getId();
         List<Participant> people = new ArrayList<>(room.getParticipants());
         people.addAll(roomPresence.roomClosed(roomId));
-        people.forEach(participant -> activity.left(LeaveReason.ROOM_CLOSED));
+        people.forEach(participant -> activity.left(roomId, LeaveReason.ROOM_CLOSED));
+        activity.roomClosed(roomId);
         log.info("The room {} was closed after {} without activity, {} people left it", roomId, idleTimeout, people.size());
         messagingTemplate.convertAndSend(PiPokerApplication.TOPIC_ROOM_DESTINATION_PREFIX + "." + roomId,
                 new RoomEvent(roomId, EventType.ROOM_CLOSED));
