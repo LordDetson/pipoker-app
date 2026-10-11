@@ -22,6 +22,7 @@ class SourceTest {
             "youtube, YOUTUBE",
             "rutube, RUTUBE",
             "instagram, INSTAGRAM",
+            "test, TEST",
             "newsletter, OTHER_LINK",
     })
     void theFromParameterNamesTheChannel(String from, Source expected) {

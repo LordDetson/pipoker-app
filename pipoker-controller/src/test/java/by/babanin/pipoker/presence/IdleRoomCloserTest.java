@@ -73,7 +73,8 @@ class IdleRoomCloserTest {
 
         closer.closeIdleRooms();
 
-        verify(activity, times(3)).left(LeaveReason.ROOM_CLOSED);
+        verify(activity, times(3)).left(room.getId(), LeaveReason.ROOM_CLOSED);
+        verify(activity).roomClosed(room.getId());
         verify(messagingTemplate).convertAndSend("/topic/room." + room.getId(),
                 new RoomEvent(room.getId(), EventType.ROOM_CLOSED));
     }
@@ -85,7 +86,7 @@ class IdleRoomCloserTest {
 
         closer.closeIdleRooms();
 
-        verify(activity, never()).left(any());
+        verify(activity, never()).left(any(), any());
         verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
     }
 }

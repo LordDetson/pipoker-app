@@ -45,6 +45,11 @@ public enum Source {
     BING("bing"),
     DUCKDUCKGO("duckduckgo"),
     /**
+     * PiPoker's own checks and automated tests, opened with {@code ?from=test}. They are no visitors: nothing about
+     * them or the rooms they create is counted (see {@link RoomActivity}).
+     */
+    TEST("test"),
+    /**
      * A {@code from} parameter nobody handed out.
      */
     OTHER_LINK("other_link"),
@@ -71,7 +76,8 @@ public enum Source {
             Map.entry(YOUTUBE.tag, YOUTUBE),
             Map.entry(RUTUBE.tag, RUTUBE),
             Map.entry(VIDEO.tag, VIDEO),
-            Map.entry(GITHUB.tag, GITHUB));
+            Map.entry(GITHUB.tag, GITHUB),
+            Map.entry(TEST.tag, TEST));
 
     // The sites visitors come from, by the host or a parent domain of the referring page
     private static final Map<String, Source> BY_DOMAIN = Map.ofEntries(

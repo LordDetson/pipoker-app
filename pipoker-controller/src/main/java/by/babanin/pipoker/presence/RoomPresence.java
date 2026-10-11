@@ -219,7 +219,7 @@ public class RoomPresence {
         try {
             roomService.showVotesIfEveryoneVoted(roomId).ifPresent(round -> {
                 log.info("The cards are revealed in the room {} because everyone has voted", roomId);
-                activity.revealed();
+                activity.revealed(roomId);
                 tellRoom(roomId, new RoomEvent(roomId, EventType.SHOW_VOTES, modelMapper.map(round, RoundDto.class)));
             });
         }
@@ -253,12 +253,12 @@ public class RoomPresence {
     }
 
     /**
-     * How many people are at the table with an open connection right now.
+     * How many people are at the table with an open connection right now, leaving out the rooms of checks and tests.
      */
     public int peopleOnline() {
         synchronized(lock) {
-            return (int) seats.values().stream()
-                    .filter(seat -> !seat.sessionIds.isEmpty())
+            return (int) seats.entrySet().stream()
+                    .filter(seat -> !seat.getValue().sessionIds.isEmpty() && !activity.isTestRoom(seat.getKey().roomId()))
                     .count();
         }
     }
@@ -409,7 +409,7 @@ public class RoomPresence {
             }
             log.info("{} left the room {} after {}", participant.getNickname(), roomId,
                     LeaveReason.PAGE_CLOSED.description());
-            activity.left(LeaveReason.PAGE_CLOSED);
+            activity.left(roomId, LeaveReason.PAGE_CLOSED);
             throw notInRoom(roomId, participant.getNickname());
         }
         log.info("{} came back to the table in the room {}", participant.getNickname(), roomId);
@@ -434,7 +434,7 @@ public class RoomPresence {
         }
         log.info("{} left the room {} after {}", departure.participant().getNickname(), seatKey.roomId(),
                 LeaveReason.PAGE_CLOSED.description());
-        activity.left(LeaveReason.PAGE_CLOSED);
+        activity.left(seatKey.roomId(), LeaveReason.PAGE_CLOSED);
         // The cards waited for this person, and the others may have all voted meanwhile
         revealIfEveryoneVoted(seatKey.roomId());
         try {
@@ -457,7 +457,7 @@ public class RoomPresence {
         try {
             roomService.removeParticipant(roomId, seatKey.nickname()).ifPresent(participant -> {
                 log.info("{} left the room {} after {}", participant.getNickname(), roomId, reason.description());
-                activity.left(reason);
+                activity.left(roomId, reason);
                 tellRoom(roomId, new RoomEvent(roomId, EventType.PARTICIPANT_REMOVED, toDto(participant)));
                 // The others may have all voted, and only this person's vote was missing
                 revealIfEveryoneVoted(roomId);
