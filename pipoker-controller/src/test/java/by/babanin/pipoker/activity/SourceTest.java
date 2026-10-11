@@ -20,6 +20,8 @@ class SourceTest {
             "hn, HACKER_NEWS",
             "devto, DEV_TO",
             "youtube, YOUTUBE",
+            "rutube, RUTUBE",
+            "instagram, INSTAGRAM",
             "newsletter, OTHER_LINK",
     })
     void theFromParameterNamesTheChannel(String from, Source expected) {
@@ -31,6 +33,8 @@ class SourceTest {
             "https://habr.com/ru/articles/1/, HABR",
             "https://t.me/agile_ru/1, TELEGRAM",
             "https://m.vk.com/wall-1_1, VK",
+            "https://vkvideo.ru/video-1_1, VK",
+            "https://www.instagram.com/p/1/, INSTAGRAM",
             "https://boosty.to/detson, BOOSTY",
             "https://alternativeto.net/software/pipoker/, ALTERNATIVETO",
             "https://vc.ru/tribuna/1, VC",
@@ -41,7 +45,8 @@ class SourceTest {
             "https://dev.to/detson/1, DEV_TO",
             "https://www.youtube.com/watch?v=1, YOUTUBE",
             "https://youtu.be/1, YOUTUBE",
-            "https://rutube.ru/video/1/, VIDEO",
+            "https://rutube.ru/video/1/, RUTUBE",
+            "https://dzen.ru/video/watch/1, OTHER_SITE",
             "https://github.com/LordDetson/pipoker-web, GITHUB",
             "https://yandex.ru/search/?text=planning+poker, YANDEX",
             "https://ya.ru/, YANDEX",

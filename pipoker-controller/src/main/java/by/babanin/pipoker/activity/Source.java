@@ -22,6 +22,7 @@ public enum Source {
     HABR("habr"),
     TELEGRAM("tg"),
     VK("vk"),
+    INSTAGRAM("instagram"),
     BOOSTY("boosty"),
     ALTERNATIVETO("alternativeto"),
     SAASHUB("saashub"),
@@ -33,8 +34,9 @@ public enum Source {
     HACKER_NEWS("hn"),
     DEV_TO("devto"),
     YOUTUBE("youtube"),
+    RUTUBE("rutube"),
     /**
-     * A video somewhere other than YouTube.
+     * A video somewhere other than YouTube, RuTube or VK Video.
      */
     VIDEO("video"),
     GITHUB("github"),
@@ -55,6 +57,7 @@ public enum Source {
             Map.entry(HABR.tag, HABR),
             Map.entry(TELEGRAM.tag, TELEGRAM),
             Map.entry(VK.tag, VK),
+            Map.entry(INSTAGRAM.tag, INSTAGRAM),
             Map.entry(BOOSTY.tag, BOOSTY),
             Map.entry(ALTERNATIVETO.tag, ALTERNATIVETO),
             Map.entry(SAASHUB.tag, SAASHUB),
@@ -66,6 +69,7 @@ public enum Source {
             Map.entry(HACKER_NEWS.tag, HACKER_NEWS),
             Map.entry(DEV_TO.tag, DEV_TO),
             Map.entry(YOUTUBE.tag, YOUTUBE),
+            Map.entry(RUTUBE.tag, RUTUBE),
             Map.entry(VIDEO.tag, VIDEO),
             Map.entry(GITHUB.tag, GITHUB));
 
@@ -79,6 +83,8 @@ public enum Source {
             Map.entry("telegram.me", TELEGRAM),
             Map.entry("vk.com", VK),
             Map.entry("vk.ru", VK),
+            Map.entry("vkvideo.ru", VK),
+            Map.entry("instagram.com", INSTAGRAM),
             Map.entry("boosty.to", BOOSTY),
             Map.entry("alternativeto.net", ALTERNATIVETO),
             Map.entry("saashub.com", SAASHUB),
@@ -92,8 +98,7 @@ public enum Source {
             Map.entry("dev.to", DEV_TO),
             Map.entry("youtube.com", YOUTUBE),
             Map.entry("youtu.be", YOUTUBE),
-            Map.entry("vkvideo.ru", VIDEO),
-            Map.entry("rutube.ru", VIDEO),
+            Map.entry("rutube.ru", RUTUBE),
             Map.entry("github.com", GITHUB),
             Map.entry("yandex.ru", YANDEX),
             Map.entry("yandex.by", YANDEX),
