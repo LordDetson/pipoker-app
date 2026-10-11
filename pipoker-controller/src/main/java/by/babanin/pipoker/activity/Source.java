@@ -3,6 +3,7 @@ package by.babanin.pipoker.activity;
 import java.net.URI;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Where a visitor came from, as the {@code source} tag of the metrics: a known channel, a search engine, or one of
@@ -48,6 +49,10 @@ public enum Source {
     GOOGLE("google"),
     BING("bing"),
     DUCKDUCKGO("duckduckgo"),
+    /**
+     * A search engine or another robot that runs the page's script, told apart by the User-Agent it sends.
+     */
+    BOT("bot"),
     /**
      * PiPoker's own checks and automated tests, opened with {@code ?from=test}. They are no visitors: nothing about
      * them or the rooms they create is counted (see {@link RoomActivity}).
@@ -122,6 +127,14 @@ public enum Source {
             Map.entry("bing.com", BING),
             Map.entry("duckduckgo.com", DUCKDUCKGO));
 
+    // How robots name themselves: Googlebot/2.1, bingbot/2.0, YandexBot/3.0, DuckDuckBot-Https/1.1, a "+http" link to
+    // their page, HeadlessChrome; and the tools scripts are written with. "bot" counts only right before one of
+    // "/-_;)" or at the end, so that a phone named "CUBOT X30" isn't one.
+    private static final Pattern ROBOT = Pattern.compile(
+            "bot[/\\-_;)]|bot$|\\+https?://|crawl|spider|slurp|headless|lighthouse|facebookexternalhit|curl/|wget/|"
+                    + "python|java/|go-http-client|okhttp|axios|node-fetch|puppeteer|playwright|selenium|phantomjs",
+            Pattern.CASE_INSENSITIVE);
+
     private final String tag;
 
     Source(String tag) {
@@ -162,6 +175,20 @@ public enum Source {
 
     public static Source of(VisitDto visit) {
         return visit == null ? DIRECT : of(visit.getFrom(), visit.getReferrer());
+    }
+
+    /**
+     * The source of a visit reported by a browser with the given User-Agent: a robot is counted as {@link #BOT}
+     * whatever link it followed, except PiPoker's own tests, which stay out of the count.
+     */
+    public static Source ofVisit(VisitDto visit, String userAgent) {
+        Source source = of(visit);
+        return source != TEST && isRobot(userAgent) ? BOT : source;
+    }
+
+    // A browser always names itself, so a visit without a name comes from a script
+    static boolean isRobot(String userAgent) {
+        return userAgent == null || userAgent.isBlank() || ROBOT.matcher(userAgent).find();
     }
 
     private static String hostOf(String referrer) {
